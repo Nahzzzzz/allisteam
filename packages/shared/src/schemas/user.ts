@@ -23,6 +23,8 @@ export interface MeView {
   trustScore: number;
   reviewCount: number;
   createdAt: string;
+  /** 是否在 ADMIN_EMAILS 白名单里，用于前端决定是否展示举报后台入口 */
+  isAdmin: boolean;
 }
 
 /** 公开主页信息：不包含邮箱等隐私字段 */

@@ -26,16 +26,23 @@ export async function createTestApp(): Promise<INestApplication> {
 export async function resetDatabase(app: INestApplication): Promise<void> {
   const prisma = app.get(PrismaService);
   await prisma.$executeRaw`TRUNCATE "Review","Message","PostMember","Application","Post","GameInfo","GameProfile","Game","RefreshToken","Block","Notification","Report","User" CASCADE`;
-  await clearRateLimits();
+  await clearEphemeralRedis();
+
+  // 游戏字典有 5 分钟缓存，测试直接清掉，避免上一个用例的游戏列表污染下一个
+  await clearKeyPattern('cache:*');
 }
 
 let rateLimitClient: Redis | null = null;
 
 /**
- * 集成测试共享同一个 Redis，注册/发局都有限流；
- * 每个用例前清掉限流计数器，避免用例之间互相 429。
+ * 集成测试与开发共用同一个 Redis：注册/发局都有限流，游戏字典还有缓存。
+ * 每个用例前清掉这些瞬时键，避免用例之间互相 429 或读到过期缓存。
  */
-async function clearRateLimits(): Promise<void> {
+async function clearEphemeralRedis(): Promise<void> {
+  await clearKeyPattern('rl:*');
+}
+
+async function clearKeyPattern(pattern: string): Promise<void> {
   const url = process.env.REDIS_URL;
   if (!url) {
     return;
@@ -44,7 +51,7 @@ async function clearRateLimits(): Promise<void> {
   if (rateLimitClient.status === 'wait') {
     await rateLimitClient.connect();
   }
-  const keys = await rateLimitClient.keys('rl:*');
+  const keys = await rateLimitClient.keys(pattern);
   if (keys.length > 0) {
     await rateLimitClient.del(...keys);
   }

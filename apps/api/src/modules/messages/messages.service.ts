@@ -101,8 +101,32 @@ export class MessagesService {
     return toMessageView(message);
   }
 
-  /** 断线补偿：返回 anchor 之后的消息，升序 */
-  private async catchUp(
+  /** 举报校验：确认消息存在，并返回发送者与所属局 */
+  async getForReport(
+    messageId: string,
+  ): Promise<{ id: string; postId: string; senderId: string | null; content: string }> {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      select: { id: true, postId: true, senderId: true, content: true },
+    });
+    if (!message) {
+      throw new AppException('NOT_FOUND', 404, '被举报的消息不存在');
+    }
+    return message;
+  }
+
+  async excerptsByIds(ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const rows = await this.prisma.message.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, content: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.content]));
+  }
+
+  /** 断线补偿：返回 anchor 之后的消息，升序 */  private async catchUp(
     postId: string,
     after: string,
     limit: number,

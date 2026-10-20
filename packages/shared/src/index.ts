@@ -7,3 +7,5 @@ export * from './schemas/game';
 export * from './schemas/post';
 export * from './schemas/application';
 export * from './schemas/message';
+export * from './schemas/review';
+export * from './schemas/report';

@@ -4,7 +4,11 @@ import { AppException } from '../../common/app-exception';
 import { RedisService } from '../../common/redis/redis.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
-const GAMES_CACHE_KEY = 'cache:games:v1';
+/** 缓存键带上环境前缀：测试与开发共用同一个 Redis，键必须隔离 */
+function gamesCacheKey(): string {
+  return `cache:${process.env.NODE_ENV ?? 'development'}:games:v1`;
+}
+
 const GAMES_CACHE_TTL_SECONDS = 300;
 
 @Injectable()
@@ -17,8 +21,9 @@ export class GamesService {
   ) {}
 
   async listGames(): Promise<GameView[]> {
+    const cacheKey = gamesCacheKey();
     try {
-      const cached = await this.redis.get(GAMES_CACHE_KEY);
+      const cached = await this.redis.get(cacheKey);
       if (cached) {
         return JSON.parse(cached) as GameView[];
       }
@@ -39,7 +44,7 @@ export class GamesService {
     }));
 
     try {
-      await this.redis.setEx(GAMES_CACHE_KEY, JSON.stringify(view), GAMES_CACHE_TTL_SECONDS);
+      await this.redis.setEx(cacheKey, JSON.stringify(view), GAMES_CACHE_TTL_SECONDS);
     } catch (error) {
       this.logger.warn(`写入游戏缓存失败：${(error as Error).message}`);
     }

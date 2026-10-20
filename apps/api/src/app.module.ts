@@ -12,6 +12,8 @@ import { GamesModule } from './modules/games/games.module';
 import { HealthModule } from './modules/health/health.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { PostsModule } from './modules/posts/posts.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -39,6 +41,8 @@ import { UsersModule } from './modules/users/users.module';
     PostsModule,
     ApplicationsModule,
     MessagesModule,
+    ReviewsModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

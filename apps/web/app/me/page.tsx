@@ -78,6 +78,14 @@ function MeContent() {
         >
           发布新局
         </Link>
+        {me.data?.isAdmin ? (
+          <Link
+            href="/admin/reports"
+            className="rounded-lg bg-neutral-100 px-3 py-2 font-medium text-neutral-700"
+          >
+            举报处理
+          </Link>
+        ) : null}
       </div>
 
       <ProfileForm

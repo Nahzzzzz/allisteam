@@ -284,6 +284,8 @@ model Post {
   @@index([domain, status, startTime])
   @@index([gameId, status, startTime])
   @@index([authorId, createdAt(sort: Desc)])
+  @@index([status, startTime])               // 定时任务扫描结束过期局
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Post_title_trgm_idx")
 }
 
 model GameInfo {
@@ -382,6 +384,7 @@ model Report {
 
   @@index([status, createdAt])
   @@index([targetType, targetId])
+  @@index([reporterId, targetType, targetId, createdAt(sort: Desc)])  // 24h 重复举报去重
 }
 
 model Notification {
@@ -418,6 +421,8 @@ ALTER TABLE "Review" ADD CONSTRAINT review_rating_range CHECK (rating BETWEEN 1 
 ```
 
 这三条 CHECK 是最后一道防线：即使应用层有 bug，也不会出现「名额 5 人却有 6 名成员」或「评分 8 星」的脏数据。
+
+标题模糊搜索用的 `pg_trgm` GIN 索引写在 `Post` 的 `@@index(... type: Gin, map: "Post_title_trgm_idx")` 里（`pg_trgm` 扩展由 `20261020160001_constraints` 创建）。声明进 schema 是必须的：只在 migration 里手写 SQL 时，`prisma migrate dev` 会把它当成多余索引生成 `DROP INDEX`。
 
 ## 6. 核心机制
 
@@ -550,6 +555,16 @@ V1 的所有筛选都是等值或范围条件，走索引即可，不引入搜�
 
 多实例部署时用 Redis 分布式锁（`SET key val NX PX`）保证同一任务只跑一次，或把 job 拆到独立进程。
 
+实现（`PostLifecycleService`）：进程内每 10 分钟触发一次，锁键 `job:close-expired-posts`、TTL 9 分钟；Redis 不可用时降级为直接执行（宁可重复执行 `updateMany`，也不要让局停在 `OPEN`）。`NODE_ENV=test` 时不注册定时器，由用例显式调用 `closeExpiredPosts()`。
+
+### 6.9 评价与举报
+
+- **评价资格**：局为 `CLOSED`，或 `startTime + 6h <= now()`（不依赖定时任务的执行时机）；调用者与被评价者都必须是 `PostMember`，不能评价自己。唯一约束 `(postId, fromId, toId)` 兜底重复评价。
+- **信誉分**：`SELECT ... FOR UPDATE` 锁定被评价用户行，再用纯函数 `nextTrustScore` 计算（公式见 `PRD.md` §8.4），与评价写入、通知写入同一事务。举报成立扣 10 分同样走行锁 + `penalizeTrustScore`。
+- **举报去重**：`(reporterId, targetType, targetId, createdAt)` 索引上查 24 小时内最近一条，命中返回 409 `REPORT_DUPLICATE` 并带 `retryAt`。
+- **管理员处理**：`report.updateMany({ where: { id, status: { in: [PENDING, REVIEWING] } } })` 做条件更新，只有第一次处理生效；下架局只影响 `OPEN/FULL`，封禁只影响 `ACTIVE` 并吊销刷新令牌。处理结果通过 `REPORT_RESULT` 通知举报人，被举报人看不到举报人身份。
+- 动作与对象类型的对应关系：`POST` 支持 `REMOVE_POST`/`BAN_USER`/`REJECT`，`USER` 支持 `BAN_USER`/`REJECT`，`MESSAGE` 只支持 `REJECT`。
+
 ## 7. API 契约
 
 统一前缀 `/api/v1`，全部 JSON，时间用 ISO 8601（UTC，带 `Z`）。
@@ -581,14 +596,16 @@ V1 的所有筛选都是等值或范围条件，走索引即可，不引入搜�
 | DELETE | `/applications/:id` | 是（本人） | 撤回（仅 PENDING） |
 | GET | `/posts/:id/members` | 是（成员或作者） | 成员列表 |
 | GET | `/posts/:id/messages` | 是（成员或作者） | 历史消息（游标；`after=<id>` 用于重连补齐） |
-| POST | `/posts/:id/reviews` | 是（成员，局结束后） | 提交评价 |
-| GET | `/users/:id` | 否 | 公开主页（昵称、信誉分、评价） |
-| POST | `/reports` | 是 | 举报 |
+| GET | `/posts/:id/reviews` | 否 | 局内评价列表（按时间正序游标） |
+| POST | `/posts/:id/reviews` | 是（成员，局结束后） | 提交评价（1–5 星），同时更新对方信誉分 |
+| GET | `/users/:id` | 否 | 公开主页（昵称、信誉分、评价数） |
+| GET | `/users/:id/reviews` | 否 | 收到的评价（按时间倒序游标） |
+| POST | `/reports` | 是 | 举报（局 / 用户 / 消息，同目标 24h 一次） |
 | GET | `/notifications` | 是 | 通知列表（未读优先） |
 | POST | `/notifications/read` | 是 | 批量已读 |
 | POST | `/uploads/presign` | 是 | 申请上传签名 |
-| GET | `/admin/reports` | 是（ADMIN） | 举报队列（V1 用环境变量白名单做管理员） |
-| PATCH | `/admin/reports/:id` | 是（ADMIN） | 处理举报 |
+| GET | `/admin/reports` | 是（ADMIN） | 举报队列，默认按提交时间正序（先到先处理） |
+| PATCH | `/admin/reports/:id` | 是（ADMIN） | 处理举报：`REMOVE_POST` / `BAN_USER` / `REJECT` |
 | GET | `/health` | 否 | 存活与就绪检查 |
 
 ### 7.2 列表请求与响应
@@ -635,7 +652,7 @@ GET /api/v1/posts?domain=GAME&gameId=xxx&platform=PC&city=成都
 | 401 | `UNAUTHORIZED` / `TOKEN_EXPIRED` | 未登录或 access 过期（前端据此刷新） |
 | 403 | `FORBIDDEN` / `NOT_POST_MEMBER` | 无权限（非作者、非成员） |
 | 404 | `NOT_FOUND` | 资源不存在或已删除 |
-| 409 | `POST_FULL` / `ALREADY_APPLIED` / `ALREADY_DECIDED` / `POST_NOT_OPEN` | 状态冲突 |
+| 409 | `POST_FULL` / `ALREADY_APPLIED` / `ALREADY_DECIDED` / `POST_NOT_OPEN` / `POST_NOT_ENDED` / `ALREADY_REVIEWED` / `REPORT_DUPLICATE` | 状态冲突 |
 | 429 | `RATE_LIMITED` | 触发限流，`details.retryAfter` |
 | 500 | `INTERNAL_ERROR` | 兜底，日志里带 `requestId`，不返回堆栈 |
 

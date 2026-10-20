@@ -55,4 +55,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
     return count;
   }
+
+  /** 分布式锁：只有拿到锁的实例返回 true */
+  async setNxPx(key: string, value: string, ttlMs: number): Promise<boolean> {
+    const result = await this.client.set(key, value, 'PX', ttlMs, 'NX');
+    return result === 'OK';
+  }
 }

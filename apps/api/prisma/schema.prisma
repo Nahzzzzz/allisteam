@@ -192,6 +192,10 @@ model Post {
   @@index([domain, status, startTime])
   @@index([gameId, status, startTime])
   @@index([authorId, createdAt(sort: Desc)])
+  // 结束过期局：status IN (OPEN, FULL) AND startTime < cutoff
+  @@index([status, startTime])
+  // 标题模糊搜索（ILIKE '%x%'）走 pg_trgm；这里声明出来，避免 migrate dev 把它当作多余索引删掉
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Post_title_trgm_idx")
 }
 
 model GameInfo {
@@ -290,6 +294,8 @@ model Report {
 
   @@index([status, createdAt])
   @@index([targetType, targetId])
+  // 24 小时内同一用户对同一目标只能举报一次，去重查询走这条索引
+  @@index([reporterId, targetType, targetId, createdAt(sort: Desc)])
 }
 
 model Notification {

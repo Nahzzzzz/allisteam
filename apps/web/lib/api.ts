@@ -2,16 +2,22 @@ import type {
   ApplicationView,
   AuthResult,
   CreatePostInput,
+  CreateReportInput,
+  CreateReviewInput,
   DecideApplicationInput,
   GameProfileInput,
   GameProfileView,
   GameView,
+  HandleReportInput,
   JoinedPostSummary,
   MeView,
   MessageView,
   MyPostSummary,
   Paginated,
   PostDetail,
+  PublicUser,
+  ReportView,
+  ReviewView,
   UpdateProfileInput,
 } from '@allisteam/shared';
 import { useAuthStore, type SessionUser } from './auth-store';
@@ -253,4 +259,61 @@ export function listMessages(
     params.set('after', options.after);
   }
   return apiFetch<Paginated<MessageView>>(`/posts/${postId}/messages?${params.toString()}`);
+}
+
+export function getPublicUser(userId: string): Promise<PublicUser> {
+  return apiFetch<PublicUser>(`/users/${userId}`);
+}
+
+export function createReview(postId: string, input: CreateReviewInput): Promise<ReviewView> {
+  return apiFetch<ReviewView>(`/posts/${postId}/reviews`, { method: 'POST', body: input });
+}
+
+export function listPostReviews(
+  postId: string,
+  cursor?: string,
+  limit = 50,
+): Promise<Paginated<ReviewView>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) {
+    params.set('cursor', cursor);
+  }
+  return apiFetch<Paginated<ReviewView>>(`/posts/${postId}/reviews?${params.toString()}`);
+}
+
+export function listUserReviews(
+  userId: string,
+  cursor?: string,
+  limit = 20,
+): Promise<Paginated<ReviewView>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) {
+    params.set('cursor', cursor);
+  }
+  return apiFetch<Paginated<ReviewView>>(`/users/${userId}/reviews?${params.toString()}`);
+}
+
+export function createReport(input: CreateReportInput): Promise<ReportView> {
+  return apiFetch<ReportView>('/reports', { method: 'POST', body: input });
+}
+
+export interface ListReportsOptions {
+  status?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function listReports(options: ListReportsOptions = {}): Promise<Paginated<ReportView>> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.status) {
+    params.set('status', options.status);
+  }
+  if (options.cursor) {
+    params.set('cursor', options.cursor);
+  }
+  return apiFetch<Paginated<ReportView>>(`/admin/reports?${params.toString()}`);
+}
+
+export function handleReport(id: string, input: HandleReportInput): Promise<ReportView> {
+  return apiFetch<ReportView>(`/admin/reports/${id}`, { method: 'PATCH', body: input });
 }

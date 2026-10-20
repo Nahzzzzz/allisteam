@@ -19,9 +19,16 @@ import { ChatEventsService } from '../messages/chat-events.service';
 import { MessagesService } from '../messages/messages.service';
 import { postDetailInclude, postSummaryInclude, toPostDetail, toPostSummary } from './posts.mapper';
 
+export interface PostReviewContext {
+  id: string;
+  status: string;
+  startTime: Date;
+  authorId: string;
+  memberIds: string[];
+}
+
 @Injectable()
-export class PostsService {
-  constructor(
+export class PostsService {  constructor(
     private readonly prisma: PrismaService,
     private readonly messages: MessagesService,
     private readonly chatEvents: ChatEventsService,
@@ -299,6 +306,75 @@ export class PostsService {
     this.chatEvents.postCancelled(postId);
 
     return { ok: true };
+  }
+
+  /** 评价资格判定所需的局信息：状态、开始时间、成员列表 */
+  async getReviewContext(postId: string): Promise<PostReviewContext> {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        status: true,
+        startTime: true,
+        authorId: true,
+        members: { select: { userId: true } },
+      },
+    });
+    if (!post) {
+      throw new AppException('NOT_FOUND', 404, '该局不存在');
+    }
+    return {
+      id: post.id,
+      status: post.status,
+      startTime: post.startTime,
+      authorId: post.authorId,
+      memberIds: post.members.map((member) => member.userId),
+    };
+  }
+
+  /** 举报校验与后台展示用：确认局存在并返回可读标题 */
+  async getForReport(postId: string): Promise<{ id: string; title: string; authorId: string }> {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, title: true, authorId: true },
+    });
+    if (!post) {
+      throw new AppException('NOT_FOUND', 404, '被举报的局不存在');
+    }
+    return post;
+  }
+
+  async titlesByIds(ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const rows = await this.prisma.post.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, title: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.title]));
+  }
+
+  /** 管理员下架局：只在 OPEN/FULL 时生效，重复处理不会覆盖已结束的局 */
+  async removeByAdmin(
+    tx: Prisma.TransactionClient,
+    postId: string,
+    reason: string,
+  ): Promise<{ removed: boolean; authorId: string }> {
+    const post = await tx.post.findUnique({
+      where: { id: postId },
+      select: { authorId: true },
+    });
+    if (!post) {
+      throw new AppException('NOT_FOUND', 404, '被举报的局不存在');
+    }
+
+    const result = await tx.post.updateMany({
+      where: { id: postId, status: { in: ['OPEN', 'FULL'] } },
+      data: { status: 'CANCELLED', cancelReason: reason },
+    });
+
+    return { removed: result.count > 0, authorId: post.authorId };
   }
 
   private async findOwned(postId: string, userId: string) {

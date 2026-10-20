@@ -2,22 +2,16 @@
 
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { PLATFORM_LABELS, type Platform } from '@allisteam/shared';
+import { PLATFORM_LABELS, POST_STATUS_LABELS, type Platform, type PostStatus } from '@allisteam/shared';
 import { ApplicationActions } from '@/components/application-actions';
 import { HostApplications } from '@/components/host-applications';
+import { ReportDialog } from '@/components/report-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { getPost } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { formatStartTime, relativeDayLabel } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
-
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: '招募中',
-  FULL: '已满员',
-  CLOSED: '已结束',
-  CANCELLED: '已取消',
-};
 
 export function PostDetailView({ postId }: { postId: string }) {
   // 详情里的 isAuthor / 我的报名状态依赖登录态，等 SessionBootstrap 恢复完会话再请求，
@@ -56,7 +50,7 @@ export function PostDetailView({ postId }: { postId: string }) {
     <main className="px-4 py-6">
       <div className="flex items-center gap-2">
         <Badge className="bg-neutral-900 text-white">{post.game?.name ?? '游戏局'}</Badge>
-        <Badge>{STATUS_LABELS[post.status] ?? post.status}</Badge>
+        <Badge>{POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}</Badge>
         {post.platform ? (
           <Badge>{PLATFORM_LABELS[post.platform as Platform] ?? post.platform}</Badge>
         ) : null}
@@ -83,7 +77,9 @@ export function PostDetailView({ postId }: { postId: string }) {
 
         <Card>
           <p className="text-xs text-neutral-500">发起人</p>
-          <p className="mt-1 font-semibold">{post.author.nickname}</p>
+          <Link href={`/users/${post.author.id}`} className="mt-1 block font-semibold underline">
+            {post.author.nickname}
+          </Link>
           <p className="mt-1 text-xs text-neutral-500">
             信誉 {post.author.trustScore} · 评价 {post.author.reviewCount}
           </p>
@@ -111,12 +107,12 @@ export function PostDetailView({ postId }: { postId: string }) {
         <ul className="mt-2 space-y-1 text-sm text-neutral-700">
           {post.members.map((member) => (
             <li key={member.userId} className="flex items-center justify-between">
-              <span>
+              <Link href={`/users/${member.userId}`} className="underline">
                 {member.nickname}
-                {member.role === 'HOST' ? (
-                  <Badge className="ml-2 bg-neutral-900 text-white">发起人</Badge>
-                ) : null}
-              </span>
+              </Link>
+              {member.role === 'HOST' ? (
+                <Badge className="bg-neutral-900 text-white">发起人</Badge>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -124,15 +120,32 @@ export function PostDetailView({ postId }: { postId: string }) {
 
       {isMember ? (
         <section className="mt-6">
-          <Link
-            href={`/posts/${post.id}/chat`}
-            className="block rounded-lg bg-neutral-900 px-4 py-3 text-center text-sm font-medium text-white"
-          >
-            进入局内聊天
-          </Link>
-          <p className="mt-2 text-center text-xs text-neutral-500">
-            成团后在这里对齐时间、语音和房间号，不用交换微信。
-          </p>
+          {post.status === 'CANCELLED' ? (
+            <p className="rounded-lg bg-neutral-100 px-4 py-3 text-center text-sm text-neutral-500">
+              发起人取消了这个局，聊天已关闭。
+            </p>
+          ) : (
+            <>
+              <Link
+                href={`/posts/${post.id}/chat`}
+                className="block rounded-lg bg-neutral-900 px-4 py-3 text-center text-sm font-medium text-white"
+              >
+                进入局内聊天
+              </Link>
+              <p className="mt-2 text-center text-xs text-neutral-500">
+                成团后在这里对齐时间、语音和房间号，不用交换微信。
+              </p>
+            </>
+          )}
+
+          {post.status === 'CLOSED' ? (
+            <Link
+              href={`/posts/${post.id}/reviews`}
+              className="mt-2 block rounded-lg bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800"
+            >
+              去评价队友
+            </Link>
+          ) : null}
         </section>
       ) : null}
 
@@ -152,6 +165,11 @@ export function PostDetailView({ postId }: { postId: string }) {
             管理我发起的局
           </Link>
         ) : null}
+        {post.isAuthor ? null : (
+          <div className="flex justify-center">
+            <ReportDialog targetType="POST" targetId={post.id} />
+          </div>
+        )}
       </div>
     </main>
   );

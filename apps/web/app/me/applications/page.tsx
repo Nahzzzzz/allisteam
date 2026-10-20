@@ -119,12 +119,22 @@ function JoinedPostRow({ post }: { post: JoinedPostSummary }) {
         {post.capacity} 人
       </p>
 
-      <Link
-        href={`/posts/${post.id}/chat`}
-        className="mt-3 inline-block rounded-lg bg-neutral-900 px-3 py-2 text-xs font-medium text-white"
-      >
-        局内聊天
-      </Link>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          href={`/posts/${post.id}/chat`}
+          className="inline-block rounded-lg bg-neutral-900 px-3 py-2 text-xs font-medium text-white"
+        >
+          局内聊天
+        </Link>
+        {post.status === 'CLOSED' ? (
+          <Link
+            href={`/posts/${post.id}/reviews`}
+            className="inline-block rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+          >
+            去评价队友
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }
