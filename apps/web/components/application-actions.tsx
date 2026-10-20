@@ -50,22 +50,22 @@ export function ApplicationActions({ post }: { post: PostDetail }) {
 
   if (post.myApplicationStatus === 'APPROVED') {
     return (
-      <Card className="bg-emerald-50">
-        <p className="text-sm font-medium text-emerald-800">你已经在成员列表里了</p>
-        <p className="mt-1 text-xs text-emerald-700">活动开始前请留意局内通知。</p>
-      </Card>
+      <div className="rounded-2xl border border-lime/30 bg-lime/10 p-4">
+        <p className="text-sm font-semibold text-lime">你已经在成员列表里了</p>
+        <p className="mt-1 text-xs text-ink-muted">活动开始前请留意局内通知。</p>
+      </div>
     );
   }
 
   if (post.myApplicationStatus === 'PENDING') {
     return (
       <Card>
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-medium">报名已提交，等待发起人审批</p>
-            <p className="mt-1 text-xs text-neutral-500">通过后会收到通知。</p>
+            <p className="text-sm font-semibold">报名已提交，等待发起人审批</p>
+            <p className="mt-1 text-xs text-ink-muted">通过后会收到通知。</p>
           </div>
-          <Badge className="bg-amber-50 text-amber-700">待审批</Badge>
+          <Badge variant="warning">待审批</Badge>
         </div>
         <Button
           className="mt-3"
@@ -80,7 +80,7 @@ export function ApplicationActions({ post }: { post: PostDetail }) {
         >
           {withdraw.isPending ? '撤回中…' : '撤回报名'}
         </Button>
-        {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+        {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
       </Card>
     );
   }
@@ -95,14 +95,12 @@ export function ApplicationActions({ post }: { post: PostDetail }) {
 
   return (
     <Card>
-      <p className="text-sm font-medium">申请加入</p>
-      <p className="mt-1 text-xs text-neutral-500">
+      <p className="text-sm font-semibold">申请加入</p>
+      <p className="mt-1 text-xs text-ink-muted">
         写一句自我介绍，让发起人更容易通过（选填，最多 {MESSAGE_LIMIT} 字）。
       </p>
       {post.myApplicationStatus === 'REJECTED' ? (
-        <p className="mt-2 text-xs text-red-600">
-          上次申请被拒绝，7 天内不能重复申请。
-        </p>
+        <p className="mt-2 text-xs text-warning">上次申请被拒绝，7 天内不能重复申请。</p>
       ) : null}
       <Textarea
         className="mt-3 min-h-24"
@@ -111,7 +109,7 @@ export function ApplicationActions({ post }: { post: PostDetail }) {
         value={message}
         onChange={(event) => setMessage(event.target.value)}
       />
-      <p className="mt-1 text-right text-xs text-neutral-400">
+      <p className="mt-1 text-right text-xs text-ink-faint">
         {message.length}/{MESSAGE_LIMIT}
       </p>
       <Button
@@ -122,7 +120,7 @@ export function ApplicationActions({ post }: { post: PostDetail }) {
       >
         {apply.isPending ? '提交中…' : '提交报名'}
       </Button>
-      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
     </Card>
   );
 }

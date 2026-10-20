@@ -6,6 +6,7 @@ import { PLATFORM_LABELS, type Platform } from '@allisteam/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, decideApplication, listApplications } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -46,55 +47,60 @@ export function HostApplications({ postId, postStatus }: { postId: string; postS
   });
 
   if (query.isPending) {
-    return <p className="text-sm text-neutral-500">正在加载报名…</p>;
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-5 w-24" />
+        <Skeleton className="h-24 w-full rounded-2xl" />
+      </div>
+    );
   }
 
   if (query.isError) {
-    return <p className="text-sm text-red-600">报名列表加载失败，请刷新重试。</p>;
+    return <p className="text-sm text-danger">报名列表加载失败，请刷新重试。</p>;
   }
 
   const items = query.data.items;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">待处理报名</h2>
-        <span className="text-xs text-neutral-500">{items.length} 条</span>
+        <span className="text-xs text-ink-faint">{items.length} 条</span>
       </div>
 
       {postStatus === 'FULL' ? (
-        <p className="text-xs text-amber-700">名额已满，新的申请暂时无法通过。</p>
+        <p className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+          名额已满，新的申请暂时无法通过。
+        </p>
       ) : null}
 
-      {items.length === 0 ? (
-        <p className="text-sm text-neutral-500">还没有人报名。</p>
-      ) : null}
+      {items.length === 0 ? <p className="text-sm text-ink-muted">还没有人报名。</p> : null}
 
       {items.map((application) => (
-        <Card key={application.id} className="space-y-2">
+        <Card key={application.id} className="space-y-2.5">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-sm font-medium">{application.applicant.nickname}</p>
-              <p className="mt-1 text-xs text-neutral-500">
+              <p className="text-sm font-semibold">{application.applicant.nickname}</p>
+              <p className="mt-1 text-xs text-ink-muted">
                 信誉 {application.applicant.trustScore} · 评价 {application.applicant.reviewCount}
                 {application.applicant.city ? ` · ${application.applicant.city}` : ''}
               </p>
             </div>
             {application.applicant.profile ? (
               <div className="flex flex-col items-end gap-1">
-                <Badge>
+                <Badge variant="outline">
                   {PLATFORM_LABELS[application.applicant.profile.platform as Platform] ??
                     application.applicant.profile.platform}
                 </Badge>
                 {application.applicant.profile.rankText ? (
-                  <Badge>{application.applicant.profile.rankText}</Badge>
+                  <Badge variant="outline">{application.applicant.profile.rankText}</Badge>
                 ) : null}
               </div>
             ) : null}
           </div>
 
           {application.message ? (
-            <p className="rounded-lg bg-neutral-50 p-2 text-xs leading-relaxed text-neutral-700">
+            <p className="rounded-xl bg-surface-2 p-2.5 text-xs leading-relaxed text-ink-muted">
               {application.message}
             </p>
           ) : null}
@@ -164,7 +170,7 @@ export function HostApplications({ postId, postStatus }: { postId: string; postS
         </Card>
       ))}
 
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
     </div>
   );
 }

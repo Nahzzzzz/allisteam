@@ -4,14 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import {
-  REVIEW_TAGS,
-  type PostDetail,
-  type ReviewTag,
-  type ReviewView,
-} from '@allisteam/shared';
+import { REVIEW_TAGS, type PostDetail, type ReviewTag, type ReviewView } from '@allisteam/shared';
+import { ArrowLeftIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, createReview, getPost, listPostReviews } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
@@ -38,35 +36,45 @@ export function PostReviews({ postId }: { postId: string }) {
   });
 
   if (postQuery.isPending || reviewsQuery.isPending) {
-    return <p className="px-4 py-16 text-center text-sm text-neutral-500">加载中…</p>;
+    return (
+      <main className="space-y-3 px-4 py-6 md:px-8">
+        <Skeleton className="h-7 w-28" />
+        <Skeleton className="h-4 w-52" />
+        <Skeleton className="h-32 w-full rounded-2xl" />
+      </main>
+    );
   }
 
   if (postQuery.isError) {
-    return <p className="px-4 py-16 text-center text-sm text-neutral-500">这个局不存在或已被删除。</p>;
+    return <EmptyState title="这个局不存在或已被删除。" />;
   }
 
   const post = postQuery.data;
   const reviews = reviewsQuery.data?.items ?? [];
   const isMember = post.isAuthor || post.members.some((member) => member.userId === myId);
   const ended =
-    post.status === 'CLOSED' || new Date(post.startTime).getTime() + REVIEW_OPEN_AFTER_MS <= Date.now();
+    post.status === 'CLOSED' ||
+    new Date(post.startTime).getTime() + REVIEW_OPEN_AFTER_MS <= Date.now();
 
   return (
-    <main className="px-4 py-6">
-      <Link href={`/posts/${post.id}`} className="text-xs text-neutral-500 underline">
+    <main className="px-4 pb-24 pt-5 md:px-8 md:pb-12 md:pt-8">
+      <Link
+        href={`/posts/${post.id}`}
+        className="inline-flex items-center gap-1 text-xs text-ink-muted transition-colors hover:text-ink"
+      >
+        <ArrowLeftIcon className="size-3.5" />
         返回局详情
       </Link>
-      <h1 className="mt-2 text-xl font-semibold">评价队友</h1>
-      <p className="mt-1 text-xs text-neutral-500">
+
+      <h1 className="mt-2 text-2xl font-bold tracking-tight">评价队友</h1>
+      <p className="mt-1 text-sm text-ink-muted">
         {post.title} · {formatStartTime(post.startTime)}
       </p>
 
       {!isMember ? (
-        <p className="mt-8 text-center text-sm text-neutral-500">只有局内成员可以评价。</p>
+        <EmptyState title="只有局内成员可以评价。" />
       ) : !ended ? (
-        <p className="mt-8 text-center text-sm text-neutral-500">
-          局还没结束，开始 6 小时后就可以评价队友了。
-        </p>
+        <EmptyState title="局还没结束" description="开始 6 小时后就可以评价队友了。" />
       ) : (
         <div className="mt-4 space-y-3">
           {post.members
@@ -86,23 +94,29 @@ export function PostReviews({ postId }: { postId: string }) {
       )}
 
       <section className="mt-8">
-        <h2 className="text-base font-semibold">这个局收到的评价</h2>
+        <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+          <span className="h-3 w-0.5 rounded-full bg-accent" />
+          这个局收到的评价
+        </h2>
         {reviews.length === 0 ? (
-          <p className="mt-2 text-sm text-neutral-500">还没有人评价。</p>
+          <p className="mt-2 text-sm text-ink-muted">还没有人评价。</p>
         ) : (
           <ul className="mt-2 space-y-2">
             {reviews.map((review) => (
-              <li key={review.id} className="rounded-lg border border-neutral-200 bg-white p-3">
-                <div className="flex items-center justify-between text-xs text-neutral-500">
+              <li
+                key={review.id}
+                className="metal-sheen rounded-2xl border border-line bg-surface p-3.5 shadow-card"
+              >
+                <div className="flex items-center justify-between text-xs text-ink-muted">
                   <span>
                     {review.from.nickname} → {review.to.nickname}
                   </span>
-                  <span>{'★'.repeat(review.rating)}</span>
+                  <span className="text-warning">{'★'.repeat(review.rating)}</span>
                 </div>
                 {review.comment ? (
-                  <p className="mt-1 text-sm text-neutral-700">{review.comment}</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-ink/90">{review.comment}</p>
                 ) : null}
-                <p className="mt-1 text-[11px] text-neutral-400">
+                <p className="mt-1.5 text-[11px] text-ink-faint">
                   {formatStartTime(review.createdAt)}
                   {review.tags.length > 0 ? ` · ${review.tags.join('/')}` : ''}
                 </p>
@@ -132,13 +146,13 @@ function ReviewTarget({
     return (
       <Card className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium">{nickname}</p>
-          <p className="mt-1 text-xs text-neutral-500">
-            {'★'.repeat(existing.rating)}
+          <p className="text-sm font-semibold">{nickname}</p>
+          <p className="mt-1 text-xs text-ink-muted">
+            <span className="text-warning">{'★'.repeat(existing.rating)}</span>
             {existing.tags.length > 0 ? ` · ${existing.tags.join('/')}` : ''}
           </p>
         </div>
-        <span className="text-xs text-neutral-500">已评价</span>
+        <span className="text-xs text-ink-faint">已评价</span>
       </Card>
     );
   }
@@ -202,7 +216,7 @@ function ReviewForm({
 
   return (
     <Card className="space-y-3">
-      <p className="text-sm font-medium">评价 {nickname}</p>
+      <p className="text-sm font-semibold">评价 {nickname}</p>
 
       <div className="flex items-center gap-1" role="group" aria-label="评分">
         {[1, 2, 3, 4, 5].map((value) => (
@@ -213,14 +227,18 @@ function ReviewForm({
             aria-pressed={rating === value}
             onClick={() => setRating(value)}
             className={cn(
-              'flex h-11 w-11 items-center justify-center rounded-lg text-xl',
-              rating >= value ? 'text-amber-500' : 'text-neutral-300',
+              'flex size-11 items-center justify-center rounded-xl text-2xl transition-colors',
+              rating >= value
+                ? 'text-warning'
+                : 'text-ink-faint/50 hover:bg-surface-2 hover:text-ink-faint',
             )}
           >
             ★
           </button>
         ))}
-        <span className="ml-1 text-xs text-neutral-500">{rating > 0 ? `${rating} 星` : '请打分'}</span>
+        <span className="ml-1 text-xs text-ink-muted">
+          {rating > 0 ? `${rating} 星` : '请打分'}
+        </span>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -231,10 +249,10 @@ function ReviewForm({
             onClick={() => toggleTag(tag)}
             aria-pressed={tags.includes(tag)}
             className={cn(
-              'min-h-11 rounded-full border px-3 text-xs',
+              'min-h-11 rounded-full border px-3 text-xs transition-colors',
               tags.includes(tag)
-                ? 'border-neutral-900 bg-neutral-900 text-white'
-                : 'border-neutral-200 text-neutral-600',
+                ? 'border-accent bg-accent/15 font-medium text-accent'
+                : 'border-line text-ink-muted hover:border-line-strong hover:text-ink',
             )}
           >
             {tag}

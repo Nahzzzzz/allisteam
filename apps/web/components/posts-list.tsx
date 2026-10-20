@@ -1,11 +1,18 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import type { Paginated, PostSummary } from '@allisteam/shared';
 import { apiFetch } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
+import { AlertIcon, CompassIcon } from '@/components/icons';
 import { PostCard } from '@/components/post-card';
-import { Button } from '@/components/ui/button';
+import { PostCardSkeleton } from '@/components/post-card-skeleton';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+
+const PAGE_SIZE = 10;
 
 export interface PostFilters {
   q?: string;
@@ -16,7 +23,7 @@ export interface PostFilters {
 }
 
 function buildPath(filters: PostFilters, cursor: string | undefined): string {
-  const params = new URLSearchParams({ limit: '10' });
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
   for (const [key, value] of Object.entries(filters)) {
     if (value) {
       params.set(key, value);
@@ -29,61 +36,111 @@ function buildPath(filters: PostFilters, cursor: string | undefined): string {
 }
 
 export function PostsList({ filters }: { filters: PostFilters }) {
-  const query = useInfiniteQuery({
-    queryKey: queryKeys.posts(filters as Record<string, string | undefined>),
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => apiFetch<Paginated<PostSummary>>(buildPath(filters, pageParam)),
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
-  });
+  const { data, isPending, isError, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useInfiniteQuery({
+      queryKey: queryKeys.posts(filters as Record<string, string | undefined>),
+      initialPageParam: undefined as string | undefined,
+      queryFn: ({ pageParam }) => apiFetch<Paginated<PostSummary>>(buildPath(filters, pageParam)),
+      getNextPageParam: (lastPage) =>
+        lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
+    });
 
-  const posts = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  if (query.isPending) {
+  // 触底自动加载；保留「加载更多」按钮做兜底（键盘用户、IntersectionObserver 不可用时）
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasNextPage || isFetchingNextPage) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: '240px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const posts = data?.pages.flatMap((page) => page.items) ?? [];
+
+  if (isPending) {
     return (
-      <div className="space-y-3 px-4 py-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
         {[0, 1, 2].map((index) => (
-          <div key={index} className="h-36 animate-pulse rounded-xl bg-neutral-100" />
+          <PostCardSkeleton key={index} />
         ))}
       </div>
     );
   }
 
-  if (query.isError) {
-    return <p className="px-4 py-10 text-center text-sm text-neutral-500">加载失败，请下拉重试</p>;
+  if (isError) {
+    return (
+      <EmptyState
+        icon={<AlertIcon />}
+        title="加载失败"
+        description="网络或服务异常，稍后再试一次。"
+        action={
+          <Button variant="secondary" size="sm" onClick={() => void refetch()}>
+            重试
+          </Button>
+        }
+      />
+    );
   }
 
   if (posts.length === 0) {
     return (
-      <div className="px-4 py-12 text-center text-sm text-neutral-500">
-        <p>还没有符合条件的局</p>
-        <p className="mt-2">
-          <a href="/posts/new" className="font-medium text-neutral-900 underline">
+      <EmptyState
+        icon={<CompassIcon />}
+        title="还没有符合条件的局"
+        description="换个游戏或放宽时间试试，也可以自己开一局等人来。"
+        action={
+          <Link href="/posts/new" className={buttonVariants({ size: 'md' })}>
             发一个自己的局
-          </a>
-        </p>
-      </div>
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <div className="space-y-3 px-4 py-4">
-      {posts.map((post) => (
-        <PostCard key={post.id} post={post} />
-      ))}
+    <section className="mt-6">
+      <div className="mb-3 flex items-end justify-between gap-2 border-b-2 border-line pb-2">
+        <h2 className="flex items-baseline gap-2 text-[13px] font-bold tracking-tight">
+          <span className="size-1.5 translate-y-[-1px] animate-pulse-dot rounded-full bg-lime" />
+          正在招募
+        </h2>
+        <span className="font-mono text-[10px] tabular-nums text-ink-faint">
+          {posts.length} 个局
+        </span>
+      </div>
 
-      {query.hasNextPage ? (
-        <Button
-          variant="secondary"
-          size="block"
-          onClick={() => void query.fetchNextPage()}
-          disabled={query.isFetchingNextPage}
-        >
-          {query.isFetchingNextPage ? '加载中…' : '加载更多'}
-        </Button>
-      ) : (
-        <p className="py-2 text-center text-xs text-neutral-400">已经到底了</p>
-      )}
-    </div>
+      <div className="grid gap-2.5 md:grid-cols-2 md:gap-3">
+        {posts.map((post) => (
+          <PostCard key={post.id} post={post} />
+        ))}
+      </div>
+
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
+
+      <div className="mt-4 flex justify-center">
+        {hasNextPage ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage ? '加载中…' : '加载更多'}
+          </Button>
+        ) : (
+          <p className="text-[11px] text-ink-faint">已经到底了</p>
+        )}
+      </div>
+    </section>
   );
 }

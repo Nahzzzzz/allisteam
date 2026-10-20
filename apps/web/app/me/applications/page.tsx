@@ -9,11 +9,16 @@ import {
   type PostStatus,
 } from '@allisteam/shared';
 import { AuthGate } from '@/components/auth-gate';
+import { ClockIcon } from '@/components/icons';
+import { PostCardSkeleton } from '@/components/post-card-skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { listMyApplications } from '@/lib/api';
-import { formatStartTime, relativeDayLabel } from '@/lib/format';
+import { formatPostTime } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
+import { statusTone, toneOf } from '@/lib/tone';
+import { cn } from '@/lib/utils';
 
 export default function MyApplicationsPage() {
   return (
@@ -35,40 +40,47 @@ function MyApplicationsContent() {
   const posts = query.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
-    <main className="px-4 py-6">
-      <h1 className="text-xl font-semibold">我参与的</h1>
-      <p className="mt-1 text-xs text-neutral-500">已经通过审批、和你一起玩的局。</p>
+    <main className="px-4 pb-24 pt-7 md:px-8 md:pb-12 md:pt-10">
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+        Joined · 参与
+      </p>
+      <h1 className="mt-2 text-[28px] font-black tracking-tight">我参与的</h1>
+      <p className="mt-1.5 text-sm text-ink-muted">已经通过审批、和你一起玩的局。</p>
 
-      <div className="mt-3 flex gap-2 text-xs">
+      <div className="mt-4 flex gap-2">
         <Link
           href="/me/posts"
-          className="rounded-lg bg-neutral-100 px-3 py-2 font-medium text-neutral-700"
+          className="rounded-[6px] border border-line bg-surface px-3.5 py-2 text-xs font-semibold text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
         >
           我发起的
         </Link>
-        <span className="rounded-lg bg-neutral-900 px-3 py-2 font-medium text-white">我参与的</span>
+        <span className="metal-fill rounded-[6px] px-3.5 py-2 text-xs font-bold text-accent-ink shadow-press">
+          我参与的
+        </span>
       </div>
 
       {query.isPending ? (
-        <p className="py-10 text-center text-sm text-neutral-500">加载中…</p>
-      ) : null}
-
-      {query.isError ? (
-        <p className="py-10 text-center text-sm text-neutral-500">加载失败，请稍后重试</p>
-      ) : null}
-
-      {!query.isPending && !query.isError && posts.length === 0 ? (
-        <div className="py-12 text-center text-sm text-neutral-500">
-          <p>还没有加入任何局</p>
-          <p className="mt-2">
-            <Link href="/" className="font-medium text-neutral-900 underline">
-              去首页看看
-            </Link>
-          </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <PostCardSkeleton />
+          <PostCardSkeleton />
         </div>
       ) : null}
 
-      <div className="mt-4 space-y-3">
+      {query.isError ? <EmptyState title="加载失败" description="稍后重试一次。" /> : null}
+
+      {!query.isPending && !query.isError && posts.length === 0 ? (
+        <EmptyState
+          title="还没有加入任何局"
+          description="去首页看看有没有合适的，或者自己开一局。"
+          action={
+            <Link href="/" className={buttonVariants({ size: 'md' })}>
+              去首页看看
+            </Link>
+          }
+        />
+      ) : null}
+
+      <div className="mt-4 space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
         {posts.map((post) => (
           <JoinedPostRow key={post.id} post={post} />
         ))}
@@ -90,46 +102,60 @@ function MyApplicationsContent() {
 }
 
 function JoinedPostRow({ post }: { post: JoinedPostSummary }) {
+  const cancelled = post.status === 'CANCELLED';
+
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <div className="flex items-center gap-2">
-        <Badge>{post.game?.name ?? '游戏'}</Badge>
-        <Badge
-          className={
-            post.status === 'OPEN'
-              ? 'bg-green-50 text-green-700'
-              : post.status === 'CANCELLED'
-                ? 'bg-neutral-100 text-neutral-500'
-                : ''
-          }
+    <div className="metal-sheen rounded-2xl border border-line bg-surface p-4 shadow-card transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-raised">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+            toneOf(post.game?.name ?? '游戏').chip,
+          )}
         >
+          <span className={cn('size-1.5 rounded-full', toneOf(post.game?.name ?? '游戏').dot)} />
+          {post.game?.name ?? '游戏'}
+        </span>
+        <Badge className={statusTone(post.status)}>
           {POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}
         </Badge>
-        <Badge className="bg-emerald-50 text-emerald-700">
+        <Badge
+          className={
+            cancelled
+              ? 'border-line bg-surface-2 text-ink-faint'
+              : 'border-lime/30 bg-lime/10 text-lime'
+          }
+        >
           {APPLY_STATUS_LABELS[post.applicationStatus] ?? post.applicationStatus}
         </Badge>
       </div>
 
-      <Link href={`/posts/${post.id}`} className="mt-2 block font-medium leading-snug">
+      <Link
+        href={`/posts/${post.id}`}
+        className="mt-2.5 block font-semibold leading-snug transition-colors hover:text-accent"
+      >
         {post.title}
       </Link>
 
-      <p className="mt-1 text-xs text-neutral-500">
-        {relativeDayLabel(post.startTime)} · {formatStartTime(post.startTime)} · {post.memberCount}/
-        {post.capacity} 人
+      <p className="mt-1.5 inline-flex items-center gap-1 text-xs text-ink-muted">
+        <ClockIcon className="size-3.5" />
+        {formatPostTime(post.startTime)} · {post.memberCount}/{post.capacity} 人
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
           href={`/posts/${post.id}/chat`}
-          className="inline-block rounded-lg bg-neutral-900 px-3 py-2 text-xs font-medium text-white"
+          className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
         >
           局内聊天
         </Link>
         {post.status === 'CLOSED' ? (
           <Link
             href={`/posts/${post.id}/reviews`}
-            className="inline-block rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+            className={cn(
+              buttonVariants({ size: 'sm', variant: 'secondary' }),
+              'border-warning/40 text-warning',
+            )}
           >
             去评价队友
           </Link>

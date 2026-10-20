@@ -16,11 +16,15 @@ import {
   type ReportView,
 } from '@allisteam/shared';
 import { AuthGate } from '@/components/auth-gate';
+import { AlertIcon, ArrowLeftIcon } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError, handleReport, listReports } from '@/lib/api';
 import { formatStartTime } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
 
 const TABS: { status: ReportStatus | null; label: string }[] = [
   { status: 'PENDING', label: '待处理' },
@@ -71,32 +75,38 @@ function AdminReportsContent() {
   const forbidden = query.isError && query.error instanceof ApiError && query.error.status === 403;
 
   return (
-    <main className="px-4 py-6">
+    <main className="px-4 pb-24 pt-7 md:px-8 md:pb-12 md:pt-10">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">举报处理</h1>
-        <Link href="/me" className="text-xs text-neutral-500 underline">
+        <h1 className="text-2xl font-bold tracking-tight">举报处理</h1>
+        <Link
+          href="/me"
+          className="inline-flex items-center gap-1 text-xs text-ink-muted transition-colors hover:text-ink"
+        >
+          <ArrowLeftIcon className="size-3.5" />
           返回我的
         </Link>
       </div>
-      <p className="mt-1 text-xs text-neutral-500">
+      <p className="mt-1.5 text-sm text-ink-muted">
         管理员白名单由 ADMIN_EMAILS 控制；处理结果会通知举报人，被举报人看不到举报人身份。
       </p>
 
       {forbidden ? (
-        <p className="mt-8 text-center text-sm text-neutral-500">没有管理员权限。</p>
+        <EmptyState title="没有管理员权限。" description="这个页面只对管理员白名单开放。" />
       ) : (
         <>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          <div className="mt-4 flex flex-wrap gap-2">
             {TABS.map((tab) => (
               <button
                 key={tab.label}
                 type="button"
                 onClick={() => setStatus(tab.status)}
-                className={
+                aria-pressed={status === tab.status}
+                className={cn(
+                  'min-h-11 rounded-full px-3.5 text-xs font-medium transition-colors',
                   status === tab.status
-                    ? 'min-h-11 rounded-lg bg-neutral-900 px-3 font-medium text-white'
-                    : 'min-h-11 rounded-lg bg-neutral-100 px-3 font-medium text-neutral-700'
-                }
+                    ? 'metal-fill text-accent-ink shadow-metal'
+                    : 'border border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink',
+                )}
               >
                 {tab.label}
               </button>
@@ -104,18 +114,21 @@ function AdminReportsContent() {
           </div>
 
           {query.isPending ? (
-            <p className="py-10 text-center text-sm text-neutral-500">加载中…</p>
+            <div className="mt-4 space-y-3">
+              <Skeleton className="h-40 w-full rounded-2xl" />
+              <Skeleton className="h-40 w-full rounded-2xl" />
+            </div>
           ) : null}
 
           {query.isError && !forbidden ? (
-            <p className="py-10 text-center text-sm text-neutral-500">加载失败，请稍后重试。</p>
+            <EmptyState title="加载失败" description="稍后重试一次。" />
           ) : null}
 
           {!query.isPending && !query.isError && query.data.items.length === 0 ? (
-            <p className="py-12 text-center text-sm text-neutral-500">这一栏没有举报。</p>
+            <EmptyState icon={<AlertIcon />} title="这一栏没有举报。" />
           ) : null}
 
-          <div className="mt-3 space-y-3">
+          <div className="mt-3 space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
             {query.data?.items.map((report) => (
               <ReportCard
                 key={report.id}
@@ -158,28 +171,28 @@ function ReportCard({
   const handled = report.status === 'RESOLVED' || report.status === 'REJECTED';
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge>{REPORT_TARGET_LABELS[report.targetType]}</Badge>
-        <Badge className="bg-amber-50 text-amber-700">
+    <div className="metal-sheen rounded-2xl border border-line bg-surface p-4 shadow-card">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant="outline">{REPORT_TARGET_LABELS[report.targetType]}</Badge>
+        <Badge variant="warning">
           {REPORT_REASON_LABELS[report.reason as ReportReason] ?? report.reason}
         </Badge>
         <Badge
-          className={
+          variant={
             report.status === 'REJECTED'
-              ? 'bg-neutral-100 text-neutral-500'
+              ? 'outline'
               : report.status === 'RESOLVED'
-                ? 'bg-emerald-50 text-emerald-700'
-                : ''
+                ? 'accent'
+                : 'neutral'
           }
         >
           {REPORT_STATUS_LABELS[report.status as ReportStatus] ?? report.status}
         </Badge>
       </div>
 
-      <p className="mt-2 text-sm font-medium">
+      <p className="mt-2.5 text-sm font-semibold">
         {targetHref ? (
-          <Link href={targetHref} className="underline">
+          <Link href={targetHref} className="underline underline-offset-4 hover:text-accent">
             {report.target?.label ?? '对象已删除'}
           </Link>
         ) : (
@@ -188,12 +201,12 @@ function ReportCard({
       </p>
 
       {report.detail ? (
-        <p className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs leading-relaxed text-neutral-700">
+        <p className="mt-2 rounded-xl bg-surface-2 p-2.5 text-xs leading-relaxed text-ink-muted">
           {report.detail}
         </p>
       ) : null}
 
-      <p className="mt-2 text-[11px] text-neutral-400">
+      <p className="mt-2 text-[11px] text-ink-faint">
         举报人 {report.reporter.nickname} · {formatStartTime(report.createdAt)}
         {report.handledAt ? ` · 处理于 ${formatStartTime(report.handledAt)}` : ''}
       </p>

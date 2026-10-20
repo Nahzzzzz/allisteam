@@ -2,15 +2,22 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
+export const buttonVariants = cva(
+  [
+    'inline-flex select-none items-center justify-center gap-2 rounded-[8px] text-sm font-semibold',
+    'transition-[background-color,border-color,color,box-shadow,filter] duration-150',
+    'active:translate-y-px disabled:pointer-events-none disabled:opacity-45',
+  ],
   {
     variants: {
       variant: {
-        primary: 'bg-neutral-900 text-white hover:bg-neutral-800',
-        secondary: 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200',
-        ghost: 'text-neutral-600 hover:bg-neutral-100',
-        danger: 'bg-red-600 text-white hover:bg-red-500',
+        // 主按钮 = 信号橙实心块，下沿一道硬边，像贴上去的印刷色块
+        primary:
+          'metal-fill text-accent-ink shadow-press hover:brightness-[1.06] active:brightness-95',
+        secondary:
+          'metal-sheen border border-line bg-surface-2 text-ink shadow-card hover:border-line-strong hover:bg-surface-3',
+        ghost: 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+        danger: 'bg-danger text-canvas shadow-card hover:bg-danger/90',
       },
       size: {
         md: 'h-11 px-4',

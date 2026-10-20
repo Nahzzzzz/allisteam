@@ -13,17 +13,26 @@ import {
   type SendMessageAck,
 } from '@allisteam/shared';
 import type { Socket } from 'socket.io-client';
+import { ArrowLeftIcon, SendIcon } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, getPost, listMessages } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { formatClock } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
 import { createChatSocket } from '@/lib/socket';
+import { cn } from '@/lib/utils';
 
 type ConnectionState = 'connecting' | 'online' | 'offline';
+
+const CONNECTION_LABEL: Record<ConnectionState, string> = {
+  online: '已连接',
+  connecting: '正在连接聊天…',
+  offline: '连接已断开，正在重试',
+};
 
 export function PostChat({ postId }: { postId: string }) {
   const hydrated = useAuthStore((state) => state.hydrated);
@@ -179,63 +188,85 @@ export function PostChat({ postId }: { postId: string }) {
   };
 
   if (!hydrated || postQuery.isPending) {
-    return <p className="px-4 py-16 text-center text-sm text-neutral-500">加载中…</p>;
+    return (
+      <main className="space-y-3 px-4 py-6 md:px-8">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-6 w-2/3" />
+        <Skeleton className="h-14 w-2/3 rounded-2xl" />
+      </main>
+    );
   }
 
   if (postQuery.isError || !post) {
     return (
-      <div className="px-4 py-16 text-center text-sm text-neutral-500">
-        <p>这个局不存在，或者已经被取消。</p>
-        <p className="mt-3">
-          <Link href="/" className="font-medium text-neutral-900 underline">
+      <EmptyState
+        title="这个局不存在，或者已经被取消。"
+        action={
+          <Link href="/" className="text-xs font-medium text-accent underline underline-offset-4">
             回首页看看别的局
           </Link>
-        </p>
-      </div>
+        }
+      />
     );
   }
 
   if (!isMember) {
     return (
-      <div className="px-4 py-16 text-center text-sm text-neutral-500">
-        <p>只有发起人和已通过的成员可以进入局内聊天。</p>
-        <p className="mt-3">
-          <Link href={`/posts/${postId}`} className="font-medium text-neutral-900 underline">
+      <EmptyState
+        title="只有发起人和已通过的成员可以进入局内聊天。"
+        action={
+          <Link
+            href={`/posts/${postId}`}
+            className="text-xs font-medium text-accent underline underline-offset-4"
+          >
             返回局详情
           </Link>
-        </p>
-      </div>
+        }
+      />
     );
   }
 
   const historyError = history.error instanceof ApiError ? history.error : null;
 
   return (
-    <main className="flex h-[calc(100vh-5rem)] flex-col">
-      <header className="border-b border-neutral-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <Link href={`/posts/${postId}`} className="text-xs text-neutral-500">
-            ← 返回局详情
+    <main className="flex h-[calc(100dvh-4rem)] flex-col md:h-dvh">
+      <header className="metal-sheen border-b border-line bg-surface/40 px-4 py-3 backdrop-blur">
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href={`/posts/${postId}`}
+            className="inline-flex items-center gap-1 text-xs text-ink-muted transition-colors hover:text-ink"
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            返回局详情
           </Link>
-          <Badge>{POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}</Badge>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className={cn(
+                'size-1.5 rounded-full',
+                connection === 'online'
+                  ? 'bg-lime'
+                  : connection === 'connecting'
+                    ? 'bg-amber'
+                    : 'bg-danger',
+              )}
+            />
+            <Badge variant="outline">
+              {POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}
+            </Badge>
+          </div>
         </div>
         <h1 className="mt-1 truncate text-base font-semibold">{post.title}</h1>
-        <p className="mt-0.5 text-xs text-neutral-500">
-          {connection === 'online'
-            ? '已连接'
-            : connection === 'connecting'
-              ? '正在连接聊天…'
-              : '连接已断开，正在重试'}
-        </p>
+        <p className="mt-0.5 text-[11px] text-ink-faint">{CONNECTION_LABEL[connection]}</p>
       </header>
 
       <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {history.isPending ? (
-          <p className="py-8 text-center text-xs text-neutral-500">正在加载历史消息…</p>
+          <p className="py-8 text-center text-xs text-ink-faint">正在加载历史消息…</p>
         ) : null}
 
         {historyError ? (
-          <p className="py-8 text-center text-xs text-red-600">{historyError.message}</p>
+          <p className="py-8 text-center text-xs text-danger">{historyError.message}</p>
         ) : null}
 
         {history.hasNextPage ? (
@@ -252,7 +283,7 @@ export function PostChat({ postId }: { postId: string }) {
         ) : null}
 
         {!history.isPending && !historyError && messages.length === 0 ? (
-          <p className="py-8 text-center text-xs text-neutral-500">
+          <p className="py-8 text-center text-xs text-ink-faint">
             还没有消息，先说句话打个招呼吧。
           </p>
         ) : null}
@@ -260,7 +291,7 @@ export function PostChat({ postId }: { postId: string }) {
         {messages.map((message) => {
           if (message.type === 'SYSTEM') {
             return (
-              <p key={message.id} className="text-center text-xs text-neutral-400">
+              <p key={message.id} className="text-center text-[11px] text-ink-faint">
                 {message.content}
               </p>
             );
@@ -269,15 +300,18 @@ export function PostChat({ postId }: { postId: string }) {
           const mine = message.sender?.id === myId;
           return (
             <div key={message.id} className={mine ? 'flex justify-end' : 'flex justify-start'}>
-              <div className="max-w-[80%]">
-                <p className={`text-xs text-neutral-500 ${mine ? 'text-right' : ''}`}>
+              <div className="max-w-[82%]">
+                <p className={cn('text-[11px] text-ink-faint', mine ? 'text-right' : 'text-left')}>
                   {mine ? '我' : (message.sender?.nickname ?? '成员')} ·{' '}
                   {formatClock(message.createdAt)}
                 </p>
                 <div
-                  className={`mt-1 whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-sm ${
-                    mine ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-900'
-                  }`}
+                  className={cn(
+                    'mt-1 whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm',
+                    mine
+                      ? 'metal-fill rounded-br-md text-accent-ink shadow-metal'
+                      : 'rounded-bl-md border border-line bg-surface-2 text-ink shadow-card',
+                  )}
                 >
                   {message.content}
                 </div>
@@ -287,11 +321,11 @@ export function PostChat({ postId }: { postId: string }) {
         })}
       </div>
 
-      <div className="border-t border-neutral-200 px-4 py-3">
+      <div className="border-t border-line px-4 py-3">
         {chatClosed ? (
-          <Card className="bg-neutral-50">
-            <p className="text-xs text-neutral-500">该局已结束，聊天记录只读。</p>
-          </Card>
+          <p className="rounded-xl bg-surface-2 px-3 py-2.5 text-center text-xs text-ink-muted">
+            该局已结束，聊天记录只读。
+          </p>
         ) : (
           <>
             <Textarea
@@ -303,21 +337,23 @@ export function PostChat({ postId }: { postId: string }) {
               onChange={(event) => setDraft(event.target.value)}
             />
             <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs text-neutral-400">
+              <span className="text-[11px] text-ink-faint">
                 {draft.length}/{MESSAGE_MAX_LENGTH}
               </span>
               <Button
                 size="sm"
+                className="gap-1.5"
                 disabled={!canSend || sending || draft.trim().length === 0}
                 onClick={handleSend}
               >
+                <SendIcon className="size-3.5" />
                 {sending ? '发送中…' : '发送'}
               </Button>
             </div>
           </>
         )}
-        {sendError ? <p className="mt-2 text-xs text-red-600">{sendError}</p> : null}
-        {socketError ? <p className="mt-2 text-xs text-red-600">{socketError}</p> : null}
+        {sendError ? <p className="mt-2 text-xs text-danger">{sendError}</p> : null}
+        {socketError ? <p className="mt-2 text-xs text-danger">{socketError}</p> : null}
       </div>
     </main>
   );

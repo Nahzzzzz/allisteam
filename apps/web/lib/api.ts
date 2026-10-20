@@ -42,17 +42,25 @@ let refreshInFlight: Promise<boolean> | null = null;
 export async function refreshSession(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
-      const response = await fetch(`${API_URL}/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        useAuthStore.getState().clear();
-        return false;
+      // 网络抖动时不能让页面一直卡在「恢复会话」上，超时按未登录处理
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5_000);
+      try {
+        const response = await fetch(`${API_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          useAuthStore.getState().clear();
+          return false;
+        }
+        const data = (await response.json()) as AuthResult;
+        useAuthStore.getState().setSession({ accessToken: data.accessToken, user: data.user });
+        return true;
+      } finally {
+        clearTimeout(timeout);
       }
-      const data = (await response.json()) as AuthResult;
-      useAuthStore.getState().setSession({ accessToken: data.accessToken, user: data.user });
-      return true;
     })()
       .catch(() => false)
       .finally(() => {

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-import { BottomNav } from '@/components/bottom-nav';
+import { BottomNav, DesktopNav } from '@/components/bottom-nav';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -12,7 +12,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#ffffff',
+  themeColor: '#08090a',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -20,7 +21,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="zh-CN">
       <body>
         <Providers>
-          <div className="mx-auto min-h-screen w-full max-w-md pb-20">{children}</div>
+          <div className="mx-auto flex min-h-dvh w-full max-w-md md:max-w-5xl">
+            <DesktopNav />
+            <div className="min-w-0 flex-1">{children}</div>
+          </div>
           <BottomNav />
         </Providers>
       </body>

@@ -1,8 +1,126 @@
 @import 'tailwindcss';
 
+/**
+ * 设计基调：夜场入场券。
+ *
+ * 底色是偏暖的炭黑（不是冷蓝黑，也不是纯黑），文字用米白，
+ * 主色「信号橙」只负责操作，荧光绿只表示「有位 / 通过 / 在线」，
+ * 每个游戏有自己的色（tone-1…8），列表扫一眼就能按颜色分开。
+ *
+ * 所有颜色必须从这里取（bg-canvas / text-ink / text-tone-3 …），
+ * 组件里不要再写 bg-neutral-900、text-red-600 这类硬编码色值。
+ */
 @theme {
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono:
+    ui-monospace, 'Cascadia Code', 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  /* 底色与面板：暖炭黑 → 抬升面板 */
+  --color-canvas: #08090a;
+  --color-surface: #101113;
+  --color-surface-2: #17181b;
+  --color-surface-3: #212327;
+  --color-line: #2a2c31;
+  --color-line-strong: #474b53;
+
+  /* 文字：米白 → 暖灰 → 暗灰 */
+  --color-ink: #f6f3ea;
+  --color-ink-muted: #a9a49b;
+  --color-ink-faint: #777268;
+
+  /* 票面纸张：整块米色 + 黑字，和炭黑背景形成印刷反差（首页票头、会员卡） */
+  --color-paper: #f2e7d2;
+  --color-paper-2: #e4d6b8;
+  --color-paper-ink: #1a1409;
+  --color-paper-muted: #6f6350;
+  /* 印刷红：纸面上的手盖章、重点词，比信号橙更“油墨” */
+  --color-signal: #ff3f2b;
+
+  /* 主色：信号橙，按钮、链接、当前导航都用它 */
+  --color-accent-highlight: #ffb28c;
+  --color-accent: #ff7a45;
+  --color-accent-2: #e35a2b;
+  --color-accent-ink: #1c0c05;
+
+  /* 语义色：绿=有位/通过，蓝=信息，紫=已结束，琥珀=紧张，玫红=危险 */
+  --color-lime: #c8f26b;
+  --color-jade: #6fe3b5;
+  --color-ice: #7cc7ff;
+  --color-cobalt: #7f9dff;
+  --color-violet: #b79cff;
+  --color-amber: #f5c451;
+  --color-rose: #ff8fa8;
+  --color-danger: #ff5f6d;
+  --color-warning: #f5c451;
+
+  /* 游戏色：按名字哈希取一个，新增游戏不用改配置 */
+  --color-tone-1: #f2c14e;
+  --color-tone-2: #ff8168;
+  --color-tone-3: #6fe0c0;
+  --color-tone-4: #79c0ff;
+  --color-tone-5: #c4a7ff;
+  --color-tone-6: #cdee6b;
+  --color-tone-7: #ff9ab5;
+  --color-tone-8: #5ad0c8;
+
+  /* 阴影：深色里靠细描边 + 极浅投影分层，不用大黑影 */
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.03), 0 12px 26px -22px rgb(0 0 0 / 0.9);
+  --shadow-raised: 0 1px 0 0 rgb(255 255 255 / 0.05), 0 22px 44px -26px rgb(0 0 0 / 0.95);
+  /* 票券：比面板再多一圈橙色余温，靠它区分「可操作」与「纯展示」 */
+  --shadow-ticket:
+    0 1px 0 0 rgb(255 255 255 / 0.05), 0 18px 36px -24px rgb(0 0 0 / 0.95),
+    0 0 0 1px rgb(255 122 69 / 0.06), 0 0 34px -22px rgb(255 122 69 / 0.45);
+  --shadow-metal: inset 0 1px 0 0 rgb(255 255 255 / 0.28), 0 10px 20px -12px rgb(0 0 0 / 0.85);
+  --shadow-input: inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+  /* 贴纸按钮：实心色块 + 下方一层硬边，像印刷贴纸而不是发光的按钮 */
+  --shadow-press: 0 3px 0 0 rgb(184 58 18 / 0.85), 0 10px 18px -14px rgb(0 0 0 / 0.9);
+  --shadow-glow: 0 0 16px -4px rgb(255 122 69 / 0.55);
+  --shadow-glow-ice: 0 0 20px -6px rgb(124 199 255 / 0.5);
+  --shadow-glow-violet: 0 0 20px -6px rgb(183 156 255 / 0.45);
+
+  /* 动效 */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-rise: rise 0.5s var(--ease-out-soft) both;
+  --animate-pulse-dot: pulse-dot 2.4s var(--ease-out-soft) infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: 150% 0;
+    }
+    to {
+      background-position: -50% 0;
+    }
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgb(200 242 107 / 0.35);
+    }
+    50% {
+      box-shadow: 0 0 0 4px rgb(200 242 107 / 0);
+    }
+  }
+}
+
+:root {
+  /* 让原生 select 下拉、date picker 图标跟着深色走 */
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
 }
 
 html,
@@ -11,8 +129,166 @@ body {
 }
 
 body {
-  background-color: var(--color-neutral-50);
-  color: var(--color-neutral-900);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  /* 夜场灯光：偏左上的一盏暖光 + 右下一点冷色反光，再压一层纸纹噪点。
+     只留两处光，避免深色页面上常见的“三色光斑”模板感。 */
+  background-image:
+    radial-gradient(120% 74% at 8% -12%, rgb(255 110 60 / 0.14), transparent 62%),
+    radial-gradient(70% 60% at 104% 108%, rgb(90 208 200 / 0.05), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-attachment: fixed;
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+/* 键盘可达性：鼠标点击不显示，Tab 聚焦必显示 */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* 面板顶部一层极浅的暖光，配合 shadow-card 用 */
+@utility metal-sheen {
+  background-image: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.04) 0%,
+    rgb(255 255 255 / 0.012) 34%,
+    transparent 64%
+  );
+}
+
+/* 主按钮 / 当前标签共用的橙色渐变 */
+@utility metal-fill {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-accent-highlight) 0%,
+    var(--color-accent) 46%,
+    var(--color-accent-2) 100%
+  );
+}
+
+/* 品牌字样：橙色渐变文字，只用在 logo 和标题点缀上 */
+@utility metal-text {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-accent-highlight) 0%,
+    var(--color-accent) 55%,
+    var(--color-accent-2) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* 海报 / 票头底色：左上暖橙、右下紫，专门给 hero、登录页和空态用 */
+@utility bg-stage {
+  background-image:
+    radial-gradient(120% 100% at 0% 0%, rgb(255 122 69 / 0.16), transparent 60%),
+    radial-gradient(90% 90% at 100% 100%, rgb(183 156 255 / 0.1), transparent 66%);
+}
+
+/* 标题热区：橙 → 玫红，只给标题里的一个词，别整段用 */
+@utility ember-text {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-accent-highlight) 0%,
+    var(--color-accent) 46%,
+    #ff5f6d 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* 票根打孔：和 overflow-hidden 搭配，在边界剪出半圆缺口 */
+@utility perforation {
+  background-color: var(--color-canvas);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+}
+
+/* 斜纹票边：给徽标、状态条加一点印刷质感 */
+@utility stripe-fill {
+  background-image: repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.16) 0 2px, transparent 2px 5px);
+}
+
+/* 票面纸：米色底 + 网点，模拟真的印出来的纸，只给大面积票头 / 会员卡用 */
+@utility paper-print {
+  background-color: var(--color-paper);
+  background-image: radial-gradient(rgb(26 20 9 / 0.05) 0.5px, transparent 0.6px);
+  background-size: 3px 3px;
+  color: var(--color-paper-ink);
+}
+
+/* 印刷色标：四段纯色横条，票根顶部的一排校验色，替代渐变色带 */
+@utility color-strip {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-accent) 0 26%,
+    var(--color-tone-1) 26% 51%,
+    var(--color-tone-3) 51% 76%,
+    var(--color-tone-5) 76% 100%
+  );
+}
+
+/* 条码：票根右端的一小段，用 currentColor，跟着父级颜色走 */
+@utility barcode {
+  background-image: repeating-linear-gradient(
+    90deg,
+    currentColor 0 1px,
+    transparent 1px 3px,
+    currentColor 3px 4px,
+    transparent 4px 6px,
+    currentColor 6px 8px,
+    transparent 8px 12px
+  );
+}
+
+/* 技术感细网格：只放在标题区做背景，靠 mask 向下淡出 */
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(72% 62% at 50% 0%, black 0%, transparent 82%);
+  -webkit-mask-image: radial-gradient(72% 62% at 50% 0%, black 0%, transparent 82%);
+}
+
+/* 面板四周一圈暖光描边，比纯 border 更有层次 */
+@utility chrome-ring {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.12);
+}
+
+/* 细斜纹：用在名额条、拉丝分区上 */
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    115deg,
+    rgb(255 255 255 / 0.07) 0 1px,
+    transparent 1px 7px
+  );
+}
+
+/* 票根边缘的锯齿/打孔：给副信息和主信息之间做分隔 */
+@utility ticket-cut {
+  background-image: radial-gradient(circle at center, var(--color-canvas) 0 55%, transparent 56%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
