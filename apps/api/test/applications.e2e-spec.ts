@@ -173,6 +173,59 @@ describe.skipIf(!hasTestDb)('报名与审批', () => {
     expect(detail.body.status).toBe('FULL');
   });
 
+  it('我参与的只含已通过的报名，我发起的带待处理报名数', async () => {
+    const postId = await createPost(4);
+    const guest = await createUserSession(app, '申请人');
+    const applied = await applyAs(postId, guest).expect(201);
+
+    const mine = await request(app.getHttpServer())
+      .get('/api/v1/me/posts')
+      .set('Authorization', `Bearer ${host.accessToken}`)
+      .expect(200);
+    const minePost = mine.body.items.find((item: { id: string }) => item.id === postId);
+    expect(minePost.pendingApplicationCount).toBe(1);
+
+    const beforeApprove = await request(app.getHttpServer())
+      .get('/api/v1/me/applications')
+      .set('Authorization', `Bearer ${guest.accessToken}`)
+      .expect(200);
+    expect(beforeApprove.body.items).toHaveLength(0);
+
+    await decideAs(applied.body.id, host, { action: 'APPROVE' }).expect(200);
+
+    const afterApprove = await request(app.getHttpServer())
+      .get('/api/v1/me/applications')
+      .set('Authorization', `Bearer ${guest.accessToken}`)
+      .expect(200);
+    expect(afterApprove.body.items).toHaveLength(1);
+    const joined = afterApprove.body.items[0];
+    expect(joined.id).toBe(postId);
+    expect(joined.applicationId).toBe(applied.body.id);
+    expect(joined.applicationStatus).toBe('APPROVED');
+    expect(joined.title).toBe('周末组排缺人速来');
+
+    const mineAfter = await request(app.getHttpServer())
+      .get('/api/v1/me/posts')
+      .set('Authorization', `Bearer ${host.accessToken}`)
+      .expect(200);
+    expect(
+      mineAfter.body.items.find((item: { id: string }) => item.id === postId).pendingApplicationCount,
+    ).toBe(0);
+  });
+
+  it('未登录不能查看我参与的局', async () => {
+    await request(app.getHttpServer()).get('/api/v1/me/applications').expect(401);
+  });
+
+  it('我参与的游标无效返回 400', async () => {
+    const guest = await createUserSession(app, '申请人');
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/me/applications?cursor=not-base64-json')
+      .set('Authorization', `Bearer ${guest.accessToken}`)
+      .expect(400);
+    expect(response.body.code).toBe('VALIDATION_FAILED');
+  });
+
   it(
     '10 并发审批抢 3 个名额，成功数恰好为 3',
     async () => {

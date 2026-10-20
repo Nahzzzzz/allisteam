@@ -3,20 +3,13 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import type { PostSummary } from '@allisteam/shared';
+import { POST_STATUS_LABELS, type MyPostSummary, type PostStatus } from '@allisteam/shared';
 import { AuthGate } from '@/components/auth-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cancelPost, listMyPosts } from '@/lib/api';
 import { formatStartTime, relativeDayLabel } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
-
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: '招募中',
-  FULL: '已满员',
-  CLOSED: '已结束',
-  CANCELLED: '已取消',
-};
 
 export default function MyPostsPage() {
   return (
@@ -53,6 +46,16 @@ function MyPostsContent() {
     <main className="px-4 py-6">
       <h1 className="text-xl font-semibold">我发起的</h1>
       <p className="mt-1 text-xs text-neutral-500">待处理报名、取消局都在这里。</p>
+
+      <div className="mt-3 flex gap-2 text-xs">
+        <span className="rounded-lg bg-neutral-900 px-3 py-2 font-medium text-white">我发起的</span>
+        <Link
+          href="/me/applications"
+          className="rounded-lg bg-neutral-100 px-3 py-2 font-medium text-neutral-700"
+        >
+          我参与的
+        </Link>
+      </div>
 
       {query.isPending ? (
         <p className="py-10 text-center text-sm text-neutral-500">加载中…</p>
@@ -108,7 +111,7 @@ function MyPostRow({
   cancelling,
   onCancel,
 }: {
-  post: PostSummary;
+  post: MyPostSummary;
   cancelling: boolean;
   onCancel: () => void;
 }) {
@@ -127,7 +130,7 @@ function MyPostRow({
                 : ''
           }
         >
-          {STATUS_LABELS[post.status] ?? post.status}
+          {POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}
         </Badge>
       </div>
 
@@ -139,6 +142,15 @@ function MyPostRow({
         {relativeDayLabel(post.startTime)} · {formatStartTime(post.startTime)} · {post.memberCount}/
         {post.capacity} 人
       </p>
+
+      {post.pendingApplicationCount > 0 ? (
+        <Link
+          href={`/posts/${post.id}`}
+          className="mt-2 inline-block rounded-lg bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700"
+        >
+          待处理 {post.pendingApplicationCount} 条报名
+        </Link>
+      ) : null}
 
       {cancellable ? (
         <Button

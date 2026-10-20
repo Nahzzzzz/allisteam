@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type {
   CreatePostInput,
+  JoinedPostSummary,
   ListPostsQuery,
+  MyApplicationsQuery,
+  MyPostSummary,
   MyPostsQuery,
   Paginated,
   PostDetail,
@@ -83,7 +86,7 @@ export class PostsService {
     };
   }
 
-  async listMine(userId: string, query: MyPostsQuery): Promise<Paginated<PostSummary>> {
+  async listMine(userId: string, query: MyPostsQuery): Promise<Paginated<MyPostSummary>> {
     const where: Prisma.PostWhereInput = { authorId: userId };
 
     if (query.cursor) {
@@ -105,8 +108,61 @@ export class PostsService {
     const items = hasMore ? rows.slice(0, query.limit) : rows;
     const last = items.at(-1);
 
+    // 一次 groupBy 取回本页所有局的待处理报名数，避免逐条 count
+    const counts =
+      items.length === 0
+        ? []
+        : await this.prisma.application.groupBy({
+            by: ['postId'],
+            where: { postId: { in: items.map((post) => post.id) }, status: 'PENDING' },
+            _count: { _all: true },
+          });
+    const pendingByPost = new Map(counts.map((row) => [row.postId, row._count._all]));
+
     return {
-      items: items.map(toPostSummary),
+      items: items.map((post) => ({
+        ...toPostSummary(post),
+        pendingApplicationCount: pendingByPost.get(post.id) ?? 0,
+      })),
+      hasMore,
+      nextCursor:
+        hasMore && last ? encodeCursor({ t: last.createdAt.toISOString(), id: last.id }) : null,
+    };
+  }
+
+  /** 「我参与的」：只返回已通过的报名，排序与游标都落在 Application.createdAt/id 上 */
+  async listJoined(
+    userId: string,
+    query: MyApplicationsQuery,
+  ): Promise<Paginated<JoinedPostSummary>> {
+    const where: Prisma.ApplicationWhereInput = { userId, status: 'APPROVED' };
+
+    if (query.cursor) {
+      const cursor = decodeCursor(query.cursor);
+      where.OR = [
+        { createdAt: { lt: new Date(cursor.t) } },
+        { createdAt: new Date(cursor.t), id: { lt: cursor.id } },
+      ];
+    }
+
+    const rows = await this.prisma.application.findMany({
+      where,
+      include: { post: { include: postSummaryInclude } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: query.limit + 1,
+    });
+
+    const hasMore = rows.length > query.limit;
+    const items = hasMore ? rows.slice(0, query.limit) : rows;
+    const last = items.at(-1);
+
+    return {
+      items: items.map((row) => ({
+        ...toPostSummary(row.post),
+        applicationId: row.id,
+        applicationStatus: row.status,
+        appliedAt: row.createdAt.toISOString(),
+      })),
       hasMore,
       nextCursor:
         hasMore && last ? encodeCursor({ t: last.createdAt.toISOString(), id: last.id }) : null,

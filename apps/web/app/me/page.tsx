@@ -67,6 +67,12 @@ function MeContent() {
           我发起的
         </Link>
         <Link
+          href="/me/applications"
+          className="rounded-lg bg-neutral-100 px-3 py-2 font-medium text-neutral-700"
+        >
+          我参与的
+        </Link>
+        <Link
           href="/posts/new"
           className="rounded-lg bg-neutral-100 px-3 py-2 font-medium text-neutral-700"
         >

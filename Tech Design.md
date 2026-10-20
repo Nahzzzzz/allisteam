@@ -569,7 +569,8 @@ V1 的所有筛选都是等值或范围条件，走索引即可，不引入搜�
 | DELETE | `/me/games/:id` | 是 | 删除档案 |
 | GET | `/games` | 否 | 游戏字典（缓存 1 小时） |
 | GET | `/posts` | 否 | 列表+筛选+游标分页 |
-| GET | `/me/posts` | 是 | 我发起的局（含全部状态，按创建时间倒序） |
+| GET | `/me/posts` | 是 | 我发起的局（含全部状态，按创建时间倒序；每项带 `pendingApplicationCount`） |
+| GET | `/me/applications` | 是 | 我参与的局（仅 `APPROVED`，按报名时间倒序；每项带 `applicationId`/`appliedAt`） |
 | POST | `/posts` | 是 | 发局（事务内写 Post + GameInfo） |
 | GET | `/posts/:id` | 否 | 详情（含成员、我的报名状态） |
 | PATCH | `/posts/:id` | 是（作者） | 修改标题/描述/时间等 |

@@ -88,8 +88,10 @@ test('主闭环续：报名 → 发起人审批 → 成团满员', async ({ page
   await guestPage.getByRole('button', { name: '提交报名' }).click();
   await expect(guestPage.getByText('报名已提交，等待发起人审批')).toBeVisible();
 
-  // 发起人审批通过
-  await page.reload();
+  // 发起人在「我发起的」看到待处理报名数
+  await page.goto('/me/posts');
+  await expect(page.getByText('待处理 1 条报名')).toBeVisible();
+  await page.goto(postUrl);
   await expect(page.getByRole('heading', { name: '待处理报名' })).toBeVisible();
   await page.getByRole('button', { name: '通过' }).click();
   await expect(page.getByText('名额已满，新的申请暂时无法通过。')).toBeVisible();
@@ -97,6 +99,11 @@ test('主闭环续：报名 → 发起人审批 → 成团满员', async ({ page
   // 申请人刷新后看到自己已经在局里
   await guestPage.reload();
   await expect(guestPage.getByText('你已经在成员列表里了')).toBeVisible();
+
+  // 「我参与的」能看到刚加入的局
+  await guestPage.goto('/me/applications');
+  await expect(guestPage.getByRole('link', { name: new RegExp(title) })).toBeVisible();
+  await expect(guestPage.getByRole('link', { name: '局内聊天' })).toBeVisible();
 
   // 局内聊天：申请人先进房发言，发起人进来能看到历史与系统消息
   await guestPage.goto(`${postUrl}/chat`);

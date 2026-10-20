@@ -24,6 +24,13 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 export const postStatusSchema = z.enum(['OPEN', 'FULL', 'CLOSED', 'CANCELLED']);
 export type PostStatus = z.infer<typeof postStatusSchema>;
 
+export const POST_STATUS_LABELS: Record<PostStatus, string> = {
+  OPEN: '招募中',
+  FULL: '已满员',
+  CLOSED: '已结束',
+  CANCELLED: '已取消',
+};
+
 export const applyStatusSchema = z.enum(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN', 'LEFT']);
 export type ApplyStatus = z.infer<typeof applyStatusSchema>;
 

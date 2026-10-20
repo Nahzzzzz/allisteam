@@ -1,5 +1,10 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { myPostsQuerySchema, type MyPostsQuery } from '@allisteam/shared';
+import {
+  myApplicationsQuerySchema,
+  myPostsQuerySchema,
+  type MyApplicationsQuery,
+  type MyPostsQuery,
+} from '@allisteam/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -18,5 +23,15 @@ export class MePostsController {
     @Query(new ZodValidationPipe(myPostsQuerySchema)) query: MyPostsQuery,
   ) {
     return this.posts.listMine(user.id, query);
+  }
+
+  /** 「我参与的」：已通过的报名；待审批/被拒/已撤回都不算参与 */
+  @Get('applications')
+  @UseGuards(JwtAuthGuard)
+  listJoined(
+    @CurrentUser() user: AuthUser,
+    @Query(new ZodValidationPipe(myApplicationsQuerySchema)) query: MyApplicationsQuery,
+  ) {
+    return this.posts.listJoined(user.id, query);
   }
 }

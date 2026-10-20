@@ -69,6 +69,11 @@ export const myPostsQuerySchema = paginationQuerySchema.strict();
 
 export type MyPostsQuery = z.infer<typeof myPostsQuerySchema>;
 
+/** 我参与的局：只含已通过的报名，按报名时间倒序 */
+export const myApplicationsQuerySchema = paginationQuerySchema.strict();
+
+export type MyApplicationsQuery = z.infer<typeof myApplicationsQuerySchema>;
+
 export interface PostSummary {
   id: string;
   title: string;
@@ -92,6 +97,18 @@ export interface PostMemberView {
   avatarUrl: string | null;
   role: string;
   joinedAt: string;
+}
+
+/** 「我发起的」列表额外带待处理报名数（PRD US-08） */
+export interface MyPostSummary extends PostSummary {
+  pendingApplicationCount: number;
+}
+
+/** 「我参与的」列表项：局信息 + 我的报名状态（PRD US-08） */
+export interface JoinedPostSummary extends PostSummary {
+  applicationId: string;
+  applicationStatus: string;
+  appliedAt: string;
 }
 
 export interface PostDetail extends PostSummary {

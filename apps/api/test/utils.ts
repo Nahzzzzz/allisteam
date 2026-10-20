@@ -32,7 +32,9 @@ export async function resetDatabase(app: INestApplication): Promise<void> {
 let rateLimitClient: Redis | null = null;
 
 /**
- * 闆嗘垚娴嬭瘯鍏变韩鍚屼竴涓?Redis锛屾敞鍐?鍙戝眬閮芥湁闄愭祦锛? * 姣忎釜鐢ㄤ緥鍓嶆竻鎺夐檺娴佽鏁板櫒锛岄伩鍏嶇敤渚嬩箣闂翠簰鐩?429銆? */
+ * 集成测试共享同一个 Redis，注册/发局都有限流；
+ * 每个用例前清掉限流计数器，避免用例之间互相 429。
+ */
 async function clearRateLimits(): Promise<void> {
   const url = process.env.REDIS_URL;
   if (!url) {
@@ -66,14 +68,14 @@ export async function registerUser(
 ): Promise<TestSession> {
   const response = await request(app.getHttpServer())
     .post('/api/v1/auth/register')
-    .send({ email, password: 'abc12345', nickname: '娴嬭瘯鐢ㄦ埛' })
+    .send({ email, password: 'abc12345', nickname: '测试用户' })
     .expect(201);
 
   const setCookie = response.headers['set-cookie'];
   const cookies = Array.isArray(setCookie) ? setCookie : [setCookie].filter(Boolean);
   const refreshCookie = cookies.find((value: string) => value.startsWith('at_refresh='));
   if (!refreshCookie) {
-    throw new Error('娉ㄥ唽鍝嶅簲娌℃湁涓嬪彂鍒锋柊浠ょ墝 cookie');
+    throw new Error('注册响应没有下发刷新令牌 cookie');
   }
 
   return {
@@ -87,21 +89,23 @@ export function futureIso(hours: number): string {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
 
-/** Socket.IO 闇€瑕佺湡瀹炵洃鍚殑绔彛锛宻upertest 鐩存帴鎵?handler 鏀朵笉鍒?WebSocket */
+/** Socket.IO 需要真实监听的端口，supertest 直接打 handler 收不到 WebSocket */
 export async function listenOnRandomPort(app: INestApplication): Promise<string> {
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address();
   if (!address || typeof address === 'string') {
-    throw new Error('鏃犳硶鑾峰彇娴嬭瘯鏈嶅姟鍣ㄧ鍙?);
+    throw new Error('无法获取测试服务器端口');
   }
   return `http://127.0.0.1:${address.port}`;
 }
 
 /**
- * 鐩存帴寤哄簱鐢ㄦ埛骞剁涓€涓?access token銆? * 瀹℃壒/骞跺彂绫绘祴璇曢渶瑕佷竴娆￠€犲崄鍑犱釜鐢ㄦ埛锛岃蛋娉ㄥ唽鎺ュ彛浼氭挒涓?5 娆?鍒嗛挓 鐨勯檺娴併€? */
+ * 直接建库用户并签一个 access token。
+ * 审批/并发类测试需要一次造十几个用户，走注册接口会撞上 5 次/分钟 的限流。
+ */
 export async function createUserSession(
   app: INestApplication,
-  nickname = '娴嬭瘯鐢ㄦ埛',
+  nickname = '测试用户',
 ): Promise<TestSession> {
   const prisma = app.get(PrismaService);
   const jwt = app.get(JwtService);

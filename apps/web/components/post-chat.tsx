@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MESSAGE_MAX_LENGTH,
+  POST_STATUS_LABELS,
   WS_EVENTS,
   type JoinPostAck,
   type MessageView,
+  type PostStatus,
   type SendMessageAck,
 } from '@allisteam/shared';
 import type { Socket } from 'socket.io-client';
@@ -22,13 +24,6 @@ import { queryKeys } from '@/lib/query-keys';
 import { createChatSocket } from '@/lib/socket';
 
 type ConnectionState = 'connecting' | 'online' | 'offline';
-
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: '招募中',
-  FULL: '已满员',
-  CLOSED: '已结束',
-  CANCELLED: '已取消',
-};
 
 export function PostChat({ postId }: { postId: string }) {
   const hydrated = useAuthStore((state) => state.hydrated);
@@ -222,7 +217,7 @@ export function PostChat({ postId }: { postId: string }) {
           <Link href={`/posts/${postId}`} className="text-xs text-neutral-500">
             ← 返回局详情
           </Link>
-          <Badge>{STATUS_LABELS[post.status] ?? post.status}</Badge>
+          <Badge>{POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}</Badge>
         </div>
         <h1 className="mt-1 truncate text-base font-semibold">{post.title}</h1>
         <p className="mt-0.5 text-xs text-neutral-500">

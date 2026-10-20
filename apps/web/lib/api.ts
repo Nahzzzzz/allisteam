@@ -6,11 +6,12 @@ import type {
   GameProfileInput,
   GameProfileView,
   GameView,
+  JoinedPostSummary,
   MeView,
   MessageView,
+  MyPostSummary,
   Paginated,
   PostDetail,
-  PostSummary,
   UpdateProfileInput,
 } from '@allisteam/shared';
 import { useAuthStore, type SessionUser } from './auth-store';
@@ -184,12 +185,20 @@ export function cancelPost(id: string): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>(`/posts/${id}`, { method: 'DELETE' });
 }
 
-export function listMyPosts(cursor?: string): Promise<Paginated<PostSummary>> {
+export function listMyPosts(cursor?: string): Promise<Paginated<MyPostSummary>> {
   const params = new URLSearchParams({ limit: '20' });
   if (cursor) {
     params.set('cursor', cursor);
   }
-  return apiFetch<Paginated<PostSummary>>(`/me/posts?${params.toString()}`);
+  return apiFetch<Paginated<MyPostSummary>>(`/me/posts?${params.toString()}`);
+}
+
+export function listMyApplications(cursor?: string): Promise<Paginated<JoinedPostSummary>> {
+  const params = new URLSearchParams({ limit: '20' });
+  if (cursor) {
+    params.set('cursor', cursor);
+  }
+  return apiFetch<Paginated<JoinedPostSummary>>(`/me/applications?${params.toString()}`);
 }
 
 export function applyToPost(postId: string, message?: string): Promise<ApplicationView> {
