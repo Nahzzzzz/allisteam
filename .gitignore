@@ -1,0 +1,35 @@
+node_modules/
+dist/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+.next-env.d.ts
+
+# 环境变量：只提交 example
+.env
+.env.*
+!.env.example
+
+# 生成物
+generated/
+prisma/generated/
+apps/api/prisma/generated/
+
+# 测试产物
+playwright-report/
+test-results/
+.blob-report/
+
+# 编辑器与系统
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+npm-debug.log*

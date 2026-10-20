@@ -1,0 +1,43 @@
+{
+  "name": "allisteam",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:shared": "npm run -w @allisteam/shared build",
+    "predev": "npm run build:shared",
+    "dev": "concurrently -k -n api,web -c blue,green \"npm run -w @allisteam/api dev\" \"npm run -w @allisteam/web dev\"",
+    "prebuild": "npm run build:shared",
+    "build": "npm run -w @allisteam/api build && npm run -w @allisteam/web build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run -w @allisteam/shared typecheck && npm run -w @allisteam/api typecheck && npm run -w @allisteam/web typecheck",
+    "test": "npm run -w @allisteam/api test",
+    "e2e": "npm run -w @allisteam/web e2e",
+    "ci": "npm run lint && npm run typecheck && npm run build:shared && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "concurrently": "^9",
+    "eslint": "^9",
+    "globals": "^16",
+    "prettier": "^3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8"
+  },
+  "allowScripts": {
+    "prisma@6.19.3": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "@swc/core@1.16.18": true,
+    "esbuild@0.27.7": true,
+    "esbuild@0.28.2": true
+  }
+}

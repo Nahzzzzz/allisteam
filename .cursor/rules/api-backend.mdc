@@ -1,0 +1,25 @@
+---
+description: NestJS 后端约定：controller 只解析参数、写操作必须校验所有权、状态变更用条件更新
+globs: apps/api/**/*.ts
+alwaysApply: false
+---
+
+# 后端规则（apps/api）
+
+细则以 `AGENTS.md` §5 与 `Tech Design.md` §5–§8 为准，这里只列最容易写错的几条。
+
+- controller 不写业务判断、不直接调用 Prisma、不手写 `res.status()`；错误一律抛 `AppException(code, status, message)`。
+- 跨模块只调用对方 service，禁止直接用别的模块的 Prisma 模型。
+- 每个按 id 的写操作，都要在 service 内校验调用者是否有权改这个资源（作者 / 发起人 / 成员）。校验失败抛 403，不靠隐藏按钮。
+- 状态变更用条件更新并检查影响行数：
+
+```ts
+const r = await tx.application.updateMany({ where: { id, status: 'PENDING' }, data: { status: 'APPROVED' } });
+if (r.count === 0) throw new AppException('ALREADY_DECIDED', 409, '该申请已处理');
+```
+
+- 事务内不做网络请求（发通知、上传）；先落库，事务外触发副作用。
+- 列表接口一律游标分页，返回 `{ items, nextCursor, hasMore }`，排序字段与游标字段必须完全一致。
+- 原生 SQL 只用 Prisma 模板字面量；枚举比较写 `'OPEN'::"PostStatus"`。
+- 时间统一 UTC，返回 ISO 8601 带 `Z`；人数、评分用整数。
+- 日志不输出密码、令牌、手机号；请求带 `requestId`。

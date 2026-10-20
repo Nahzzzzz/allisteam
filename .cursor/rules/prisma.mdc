@@ -1,0 +1,15 @@
+---
+description: Prisma 与迁移约定：迁移只增不改、新增筛选必须配索引、CHECK 约束写在迁移里
+globs: apps/api/prisma/**/*
+alwaysApply: false
+---
+
+# 数据库规则（apps/api/prisma）
+
+- 结构变更只通过迁移：`npm run -w @allisteam/api prisma:migrate -- --name <蛇形描述>`。已提交的迁移文件不可修改，改错就新增一个迁移。
+- 新增任何筛选条件，必须同时加索引，并在 `Tech Design.md` §5.2 说明；不要依赖数据库全表扫描。
+- Prisma schema 表达不了的约束（CHECK、部分索引、`CREATE EXTENSION`）写在迁移 SQL 末尾，并注明原因。
+- `generator client` 固定 `prisma-client-js`（Prisma 6.x），不要切到 `prisma-client`；升级 Prisma 主版本需要单独评估并在 `Tech Design.md` §2 记录。
+- `datasource` 同时配置 `url`（pooled）与 `directUrl`（直连）：迁移必须走 `DIRECT_URL`，否则 Neon 的 PgBouncer 会报错。
+- `Post.gameId` 是反范式筛选字段，写入时必须与 `GameInfo.gameId` 在同一事务内一致。
+- seed 只放游戏字典与演示局，不放真实用户数据；`prisma migrate dev` 在 Prisma 7 起不再自动 seed，这里统一显式 `prisma:seed`。

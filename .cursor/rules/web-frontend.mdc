@@ -1,0 +1,16 @@
+---
+description: 前端约定：默认 Server Component、请求只走 lib/api.ts、移动端 375px 优先、表单复用 shared schema
+globs: apps/web/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# 前端规则（apps/web）
+
+- App Router：默认 Server Component，只有需要交互、浏览器 API 或登录态数据时才加 `'use client'`，并尽量把 `'use client'` 下沉到叶子组件。
+- 所有请求走 `lib/api.ts`：统一拼 `NEXT_PUBLIC_API_URL`、带 access token、`credentials: 'include'`、`TOKEN_EXPIRED` 时串行刷新一次再重试。组件里禁止裸 `fetch` 与裸 `useEffect` 拉数据。
+- 服务端数据用 TanStack Query；查询键集中在 `lib/query-keys.ts`，不要散落字符串。
+- 表单用 react-hook-form + `packages/shared` 的 zod schema；前端校验只是体验，不能替代后端校验。
+- access token 只存内存（zustand，不持久化），刷新令牌在 httpOnly cookie；不要把 token 写进 localStorage。
+- 移动端 375px 优先，触控目标 ≥ 44px；桌面端只做增强布局。
+- 样式用 Tailwind + `components/ui` 里的组件；不写内联色值、不新增全局 CSS 变量。
+- 时间展示统一走 `lib/format.ts`（本地时区格式化），接口层不加时区偏移。

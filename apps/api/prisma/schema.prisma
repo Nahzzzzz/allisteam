@@ -1,0 +1,317 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Domain {
+  GAME
+  CONCERT
+  TRAVEL
+}
+
+enum Platform {
+  PC
+  PLAYSTATION
+  XBOX
+  SWITCH
+  MOBILE
+}
+
+enum PostStatus {
+  OPEN
+  FULL
+  CLOSED
+  CANCELLED
+}
+
+enum ApplyStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  LEFT
+}
+
+enum MemberRole {
+  HOST
+  MEMBER
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum ReportTargetType {
+  POST
+  USER
+  MESSAGE
+}
+
+enum ReportReason {
+  FAKE_INFO
+  HARASSMENT
+  AD
+  SPAM
+  FRAUD
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  REJECTED
+}
+
+enum NotificationType {
+  APPLICATION_RECEIVED
+  APPLICATION_APPROVED
+  APPLICATION_REJECTED
+  POST_FULL
+  POST_CANCELLED
+  POST_REMINDER
+  NEW_MESSAGE
+  REVIEW_RECEIVED
+  REPORT_RESULT
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  phone        String?    @unique
+  nickname     String
+  avatarKey    String?
+  bio          String?
+  city         String?
+  trustScore   Int        @default(60)
+  reviewCount  Int        @default(0)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  refreshTokens  RefreshToken[]
+  gameProfiles   GameProfile[]
+  posts          Post[]          @relation("AuthoredPosts")
+  applications   Application[]   @relation("Applicant")
+  memberships    PostMember[]
+  messages       Message[]
+  reviewsGiven   Review[]        @relation("ReviewFrom")
+  reviewsGot     Review[]        @relation("ReviewTo")
+  notifications  Notification[]
+  reportsMade    Report[]        @relation("Reporter")
+  reportsHandled Report[]        @relation("Handler")
+  blocksMade     Block[]         @relation("Blocker")
+  blocksReceived Block[]         @relation("Blocked")
+
+  @@index([status, createdAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+}
+
+model Game {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  coverKey  String?
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  profiles GameProfile[]
+  posts    Post[]
+}
+
+model GameProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  gameId    String
+  platform  Platform
+  rankText  String?
+  voiceOk   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id])
+
+  @@unique([userId, gameId, platform])
+  @@index([gameId, platform])
+}
+
+model Post {
+  id           String     @id @default(cuid())
+  authorId     String
+  domain       Domain     @default(GAME)
+  title        String
+  description  String
+  city         String?
+  startTime    DateTime
+  endTime      DateTime?
+  capacity     Int
+  memberCount  Int        @default(1)
+  status       PostStatus @default(OPEN)
+  gameId       String?
+  coverKey     String?
+  cancelReason String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  author       User          @relation("AuthoredPosts", fields: [authorId], references: [id])
+  game         Game?         @relation(fields: [gameId], references: [id])
+  gameInfo     GameInfo?
+  applications Application[]
+  members      PostMember[]
+  messages     Message[]
+  reviews      Review[]
+
+  @@index([domain, status, startTime])
+  @@index([gameId, status, startTime])
+  @@index([authorId, createdAt(sort: Desc)])
+}
+
+model GameInfo {
+  postId    String   @id
+  gameId    String
+  platform  Platform
+  mode      String?
+  rankMin   String?
+  rankMax   String?
+  needVoice Boolean  @default(false)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, platform])
+}
+
+model Application {
+  id           String      @id @default(cuid())
+  postId       String
+  userId       String
+  message      String?
+  status       ApplyStatus @default(PENDING)
+  rejectReason String?
+  decidedById  String?
+  decidedAt    DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation("Applicant", fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+  @@index([postId, status, createdAt])
+  @@index([userId, status, createdAt(sort: Desc)])
+}
+
+model PostMember {
+  postId   String
+  userId   String
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, joinedAt(sort: Desc)])
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  postId    String
+  senderId  String?
+  type      MessageType @default(TEXT)
+  content   String
+  createdAt DateTime    @default(now())
+
+  post   Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sender User? @relation(fields: [senderId], references: [id])
+
+  @@index([postId, createdAt, id])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  postId    String
+  fromId    String
+  toId      String
+  rating    Int
+  comment   String?
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  from User @relation("ReviewFrom", fields: [fromId], references: [id])
+  to   User @relation("ReviewTo", fields: [toId], references: [id])
+
+  @@unique([postId, fromId, toId])
+  @@index([toId, createdAt(sort: Desc)])
+}
+
+model Report {
+  id          String           @id @default(cuid())
+  reporterId  String
+  targetType  ReportTargetType
+  targetId    String
+  reason      ReportReason
+  detail      String?
+  status      ReportStatus     @default(PENDING)
+  handledById String?
+  handledAt   DateTime?
+  createdAt   DateTime         @default(now())
+
+  reporter User  @relation("Reporter", fields: [reporterId], references: [id])
+  handled  User? @relation("Handler", fields: [handledById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+}
+
+model Block {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+}
