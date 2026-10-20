@@ -53,7 +53,7 @@ PostgreSQL 用 Neon / Supabase，Redis 用 Upstash，对象存储用 Cloudflare 
 | ORM | Prisma | 6.19.3 | 迁移、类型生成、事务 API 好用 | Drizzle |
 | 数据库 | PostgreSQL 16（Neon 托管） | — | 事务、约束、部分索引、`pg_trgm`；后续加 PostGIS 做地理筛选 | — |
 | 缓存 | Redis 7（Upstash 托管） | ioredis 5 | 限流计数、在线状态、Socket.IO adapter | — |
-| 实时 | Socket.IO 4（Redis adapter） | 4.8.4（M4 引入） | 房间、重连、ack 语义开箱即用 | 原生 ws + 自建重连 |
+| 实时 | Socket.IO 4（Redis adapter） | socket.io 4.8.4、@nestjs/websockets / @nestjs/platform-socket.io 11.2.7、@socket.io/redis-adapter 8.3.0 | 房间、重连、ack 语义开箱即用；Nest 侧固定 11.x（12.x 的 `@nestjs/websockets` 要求 `@nestjs/common@12`） | 原生 ws + 自建重连 |
 | 对象存储 | MinIO（本地）/ Cloudflare R2（生产） | 暂缓 | S3 协议，代码零改动切换 | 阿里云 OSS |
 | 鉴权 | 自建 JWT（access）+ 不透明刷新令牌 | @nestjs/jwt 12 | 可控、可撤销、便于理解会话安全 | Auth.js、Clerk |
 | 密码哈希 | bcryptjs | 3.x | 纯 JS，避免 Windows 原生编译 | argon2 |
@@ -508,6 +508,16 @@ where: cursor ? {
 | 多实例 | `@socket.io/redis-adapter`，在线状态用 Redis `SETEX` 存 `online:{postId}:{userId}` |
 | 断线补偿 | 重连后客户端请求 `after=lastMessageId` 补齐 |
 
+实现细节（M4 已落地）：
+
+- 事件名集中在 `packages/shared/src/schemas/message.ts` 的 `WS_EVENTS`，前后端不复写字符串；上行消息体用 `sendMessagePayloadSchema` 校验，服务端再校验一次。
+- 入房用 `post:join { postId }`，ack 失败返回 `{ ok: false, code, message }`（`NOT_POST_MEMBER` 等），随后由服务端断开连接；发消息前必须已在该房间，否则 ack 返回 `FORBIDDEN`。
+- `message:send` 的 ack 成功返回 `{ ok: true, message }`；限流为单用户 10 秒 10 条（Redis `ws:msg:{userId}`），超限返回 `RATE_LIMITED`。
+- 连接在 `handleConnection` 阶段校验 `handshake.auth.token`，失败先发 `auth:error` 再断开；access token 过期后由客户端刷新页面重连。
+- 审批通过、成团满员、发起人取消都会写入 `type=SYSTEM` 的消息（`xxx 加入了局`、`人数已满，成团啦`、`发起人取消了这个局`），并在事务提交后广播 `message:new` 与 `member:joined` / `post:full` / `post:cancelled`。
+- `GET /posts/:id/messages` 默认按 `createdAt DESC, id DESC` 返回，向上翻页用 `cursor`；传 `after` 时改为升序返回该消息之后的增量，供重连补齐。
+- `CANCELLED` / `CLOSED` 的局历史可读但发消息返回 `POST_NOT_OPEN`（409）。
+
 不做消息已读回执与输入中提示（P2）。消息长度与频率由服务端再次校验，不能只信前端。
 
 ### 6.6 搜索与筛选
@@ -569,7 +579,7 @@ V1 的所有筛选都是等值或范围条件，走索引即可，不引入搜�
 | PATCH | `/applications/:id` | 是（作者） | 通过/拒绝 |
 | DELETE | `/applications/:id` | 是（本人） | 撤回（仅 PENDING） |
 | GET | `/posts/:id/members` | 是（成员或作者） | 成员列表 |
-| GET | `/posts/:id/messages` | 是（成员或作者） | 历史消息（游标） |
+| GET | `/posts/:id/messages` | 是（成员或作者） | 历史消息（游标；`after=<id>` 用于重连补齐） |
 | POST | `/posts/:id/reviews` | 是（成员，局结束后） | 提交评价 |
 | GET | `/users/:id` | 否 | 公开主页（昵称、信誉分、评价） |
 | POST | `/reports` | 是 | 举报 |

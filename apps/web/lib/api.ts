@@ -1,10 +1,13 @@
 import type {
+  ApplicationView,
   AuthResult,
   CreatePostInput,
+  DecideApplicationInput,
   GameProfileInput,
   GameProfileView,
   GameView,
   MeView,
+  MessageView,
   Paginated,
   PostDetail,
   PostSummary,
@@ -187,4 +190,58 @@ export function listMyPosts(cursor?: string): Promise<Paginated<PostSummary>> {
     params.set('cursor', cursor);
   }
   return apiFetch<Paginated<PostSummary>>(`/me/posts?${params.toString()}`);
+}
+
+export function applyToPost(postId: string, message?: string): Promise<ApplicationView> {
+  return apiFetch<ApplicationView>(`/posts/${postId}/applications`, {
+    method: 'POST',
+    body: message && message.trim().length > 0 ? { message } : {},
+  });
+}
+
+export function listApplications(
+  postId: string,
+  status?: string,
+): Promise<Paginated<ApplicationView>> {
+  const params = new URLSearchParams({ limit: '20' });
+  if (status) {
+    params.set('status', status);
+  }
+  return apiFetch<Paginated<ApplicationView>>(`/posts/${postId}/applications?${params.toString()}`);
+}
+
+export function decideApplication(
+  applicationId: string,
+  input: DecideApplicationInput,
+): Promise<ApplicationView> {
+  return apiFetch<ApplicationView>(`/applications/${applicationId}`, {
+    method: 'PATCH',
+    body: input,
+  });
+}
+
+export function withdrawApplication(applicationId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(`/applications/${applicationId}`, { method: 'DELETE' });
+}
+
+export interface ListMessagesOptions {
+  /** 向上翻页游标 */
+  cursor?: string;
+  /** 断线补偿：返回这条消息之后的消息（升序） */
+  after?: string;
+  limit?: number;
+}
+
+export function listMessages(
+  postId: string,
+  options: ListMessagesOptions = {},
+): Promise<Paginated<MessageView>> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 30) });
+  if (options.cursor) {
+    params.set('cursor', options.cursor);
+  }
+  if (options.after) {
+    params.set('after', options.after);
+  }
+  return apiFetch<Paginated<MessageView>>(`/posts/${postId}/messages?${params.toString()}`);
 }

@@ -100,4 +100,6 @@ export interface PostDetail extends PostSummary {
   members: PostMemberView[];
   isAuthor: boolean;
   myApplicationStatus: string | null;
+  /** 我的报名记录 id，用于撤回；没报过名时为 null */
+  myApplicationId: string | null;
 }

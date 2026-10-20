@@ -6,9 +6,11 @@ import { RedisModule } from './common/redis/redis.module';
 import { EnvModule } from './config/env.module';
 import { EnvService } from './config/env.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { ApplicationsModule } from './modules/applications/applications.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { GamesModule } from './modules/games/games.module';
 import { HealthModule } from './modules/health/health.module';
+import { MessagesModule } from './modules/messages/messages.module';
 import { PostsModule } from './modules/posts/posts.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -35,6 +37,8 @@ import { UsersModule } from './modules/users/users.module';
     UsersModule,
     GamesModule,
     PostsModule,
+    ApplicationsModule,
+    MessagesModule,
   ],
 })
 export class AppModule {}

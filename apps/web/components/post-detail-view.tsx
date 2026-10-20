@@ -3,10 +3,12 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { PLATFORM_LABELS, type Platform } from '@allisteam/shared';
+import { ApplicationActions } from '@/components/application-actions';
+import { HostApplications } from '@/components/host-applications';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { getPost } from '@/lib/api';
+import { useAuthStore } from '@/lib/auth-store';
 import { formatStartTime, relativeDayLabel } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -18,9 +20,14 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export function PostDetailView({ postId }: { postId: string }) {
+  // 详情里的 isAuthor / 我的报名状态依赖登录态，等 SessionBootstrap 恢复完会话再请求，
+  // 否则会先用匿名身份拿到一份「我不是发起人」的数据
+  const hydrated = useAuthStore((state) => state.hydrated);
+  const myId = useAuthStore((state) => state.user?.id);
   const query = useQuery({
     queryKey: queryKeys.post(postId),
     queryFn: () => getPost(postId),
+    enabled: hydrated,
   });
 
   if (query.isPending) {
@@ -42,6 +49,8 @@ export function PostDetailView({ postId }: { postId: string }) {
 
   const post = query.data;
   const remaining = post.capacity - post.memberCount;
+  const isMember =
+    post.isAuthor || post.members.some((member) => member.userId === myId);
 
   return (
     <main className="px-4 py-6">
@@ -113,10 +122,28 @@ export function PostDetailView({ postId }: { postId: string }) {
         </ul>
       </section>
 
+      {isMember ? (
+        <section className="mt-6">
+          <Link
+            href={`/posts/${post.id}/chat`}
+            className="block rounded-lg bg-neutral-900 px-4 py-3 text-center text-sm font-medium text-white"
+          >
+            进入局内聊天
+          </Link>
+          <p className="mt-2 text-center text-xs text-neutral-500">
+            成团后在这里对齐时间、语音和房间号，不用交换微信。
+          </p>
+        </section>
+      ) : null}
+
+      {post.isAuthor ? (
+        <section className="mt-8">
+          <HostApplications postId={post.id} postStatus={post.status} />
+        </section>
+      ) : null}
+
       <div className="mt-8 space-y-2">
-        <Button size="block" disabled>
-          报名功能将在下一阶段开放
-        </Button>
+        <ApplicationActions post={post} />
         {post.isAuthor ? (
           <Link
             href="/me/posts"

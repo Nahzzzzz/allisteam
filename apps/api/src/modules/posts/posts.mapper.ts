@@ -69,7 +69,7 @@ export function toPostSummary(post: PostForSummary): PostSummary {
 export function toPostDetail(
   post: PostForDetail,
   viewer: { id: string } | undefined,
-  myApplicationStatus: string | null,
+  myApplication: { id: string; status: string } | null,
 ): PostDetail {
   const members: PostMemberView[] = post.members.map((member) => ({
     userId: member.user.id,
@@ -85,6 +85,7 @@ export function toPostDetail(
     city: post.city,
     members,
     isAuthor: viewer !== undefined && viewer.id === post.authorId,
-    myApplicationStatus,
+    myApplicationStatus: myApplication?.status ?? null,
+    myApplicationId: myApplication?.id ?? null,
   };
 }

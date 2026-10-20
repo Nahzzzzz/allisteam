@@ -26,8 +26,17 @@ export function relativeDayLabel(iso: string): string {
   return formatStartTime(iso);
 }
 
-/** datetime-local 的值按用户本地时区解释，提交前转成 UTC ISO */
-export function localInputToIso(value: string): string {
+const clockFormatter = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** 聊天气泡上的时间：只显示时分 */
+export function formatClock(iso: string): string {
+  return clockFormatter.format(new Date(iso));
+}
+
+/** datetime-local 的值按用户本地时区解释，提交前转成 UTC ISO */export function localInputToIso(value: string): string {
   return new Date(value).toISOString();
 }
 

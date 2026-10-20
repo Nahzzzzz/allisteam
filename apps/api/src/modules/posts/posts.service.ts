@@ -12,11 +12,17 @@ import type {
 import { AppException } from '../../common/app-exception';
 import { decodeCursor, encodeCursor } from '../../common/pagination/cursor';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ChatEventsService } from '../messages/chat-events.service';
+import { MessagesService } from '../messages/messages.service';
 import { postDetailInclude, postSummaryInclude, toPostDetail, toPostSummary } from './posts.mapper';
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly messages: MessagesService,
+    private readonly chatEvents: ChatEventsService,
+  ) {}
 
   async list(query: ListPostsQuery): Promise<Paginated<PostSummary>> {
     const now = new Date();
@@ -119,11 +125,11 @@ export class PostsService {
     const application = viewer
       ? await this.prisma.application.findUnique({
           where: { postId_userId: { postId, userId: viewer.id } },
-          select: { status: true },
+          select: { id: true, status: true },
         })
       : null;
 
-    return toPostDetail(post, viewer, application?.status ?? null);
+    return toPostDetail(post, viewer, application);
   }
 
   async create(authorId: string, input: CreatePostInput): Promise<PostDetail> {
@@ -208,12 +214,18 @@ export class PostsService {
   }
 
   async cancel(postId: string, userId: string): Promise<{ ok: true }> {
-    const result = await this.prisma.post.updateMany({
-      where: { id: postId, authorId: userId, status: { in: ['OPEN', 'FULL'] } },
-      data: { status: 'CANCELLED' },
+    const systemMessage = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.post.updateMany({
+        where: { id: postId, authorId: userId, status: { in: ['OPEN', 'FULL'] } },
+        data: { status: 'CANCELLED' },
+      });
+      if (updated.count === 0) {
+        return null;
+      }
+      return this.messages.appendSystemMessage(tx, postId, '发起人取消了这个局，聊天已关闭');
     });
 
-    if (result.count === 0) {
+    if (!systemMessage) {
       const exists = await this.prisma.post.findUnique({
         where: { id: postId },
         select: { authorId: true },
@@ -226,6 +238,9 @@ export class PostsService {
       }
       throw new AppException('POST_NOT_OPEN', 409, '该局当前状态不可取消');
     }
+
+    this.chatEvents.messageCreated(systemMessage);
+    this.chatEvents.postCancelled(postId);
 
     return { ok: true };
   }
