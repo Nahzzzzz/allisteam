@@ -1,5 +1,12 @@
 import type { Prisma } from '@prisma/client';
-import type { PostDetail, PostMemberView, PostSummary, PublicUser } from '@allisteam/shared';
+import type {
+  ConcertSummary,
+  PostDetail,
+  PostMemberView,
+  PostSummary,
+  PublicUser,
+  TravelSummary,
+} from '@allisteam/shared';
 
 export const authorSelect = {
   id: true,
@@ -15,6 +22,26 @@ export const postSummaryInclude = {
   game: { select: { id: true, name: true } },
   gameInfo: {
     select: { platform: true, mode: true, rankMin: true, rankMax: true, needVoice: true },
+  },
+  concertInfo: {
+    select: {
+      artist: true,
+      tourName: true,
+      venue: true,
+      seatType: true,
+      hasTicket: true,
+      ticketNote: true,
+    },
+  },
+  travelInfo: {
+    select: {
+      destination: true,
+      budgetMin: true,
+      budgetMax: true,
+      transport: true,
+      intensity: true,
+      shareRoom: true,
+    },
   },
 } satisfies Prisma.PostInclude;
 
@@ -47,6 +74,36 @@ function toPublicUser(author: {
   };
 }
 
+function toConcertSummary(
+  info: PostForSummary['concertInfo'],
+): ConcertSummary | null {
+  if (!info) {
+    return null;
+  }
+  return {
+    artist: info.artist,
+    tourName: info.tourName,
+    venue: info.venue,
+    seatType: info.seatType,
+    hasTicket: info.hasTicket,
+    ticketNote: info.ticketNote,
+  };
+}
+
+function toTravelSummary(info: PostForSummary['travelInfo']): TravelSummary | null {
+  if (!info) {
+    return null;
+  }
+  return {
+    destination: info.destination,
+    budgetMin: info.budgetMin,
+    budgetMax: info.budgetMax,
+    transport: info.transport,
+    intensity: info.intensity,
+    shareRoom: info.shareRoom,
+  };
+}
+
 export function toPostSummary(post: PostForSummary): PostSummary {
   return {
     id: post.id,
@@ -58,7 +115,11 @@ export function toPostSummary(post: PostForSummary): PostSummary {
     rankMin: post.gameInfo?.rankMin ?? null,
     rankMax: post.gameInfo?.rankMax ?? null,
     needVoice: post.gameInfo?.needVoice ?? false,
+    concert: toConcertSummary(post.concertInfo),
+    travel: toTravelSummary(post.travelInfo),
     startTime: post.startTime.toISOString(),
+    endTime: post.endTime ? post.endTime.toISOString() : null,
+    city: post.city,
     capacity: post.capacity,
     memberCount: post.memberCount,
     status: post.status,

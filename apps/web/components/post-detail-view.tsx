@@ -4,10 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  CONCERT_SEAT_LABELS,
   PLATFORM_LABELS,
   POST_STATUS_LABELS,
+  TRAVEL_INTENSITY_LABELS,
+  TRAVEL_TRANSPORT_LABELS,
+  gameModuleOf,
+  type ConcertSeat,
   type Platform,
   type PostStatus,
+  type TravelIntensity,
+  type TravelTransport,
 } from '@allisteam/shared';
 import { ApplicationActions } from '@/components/application-actions';
 import { HostApplications } from '@/components/host-applications';
@@ -27,7 +34,8 @@ import {
 } from '@/components/icons';
 import { getPost } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
-import { formatPostTime } from '@/lib/format';
+import { domainOf } from '@/lib/domain';
+import { formatBudget, formatDateRange, formatPostTime } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
 import { statusTone, toneOf } from '@/lib/tone';
 import { cn } from '@/lib/utils';
@@ -42,6 +50,28 @@ function SectionLabel({ children }: { children: string }) {
       <span className="h-3 w-0.5 rounded-full bg-accent" />
       {children}
     </h2>
+  );
+}
+
+/** 领域属性表：左边固定宽度的字段名，右边值，用虚线分隔成一张小票 */
+function InfoGrid({ rows }: { rows: { label: string; value: string }[] }) {
+  return (
+    <dl className="mt-2 overflow-hidden rounded-[10px] border border-line bg-surface">
+      {rows.map((row, index) => (
+        <div
+          key={row.label}
+          className={cn(
+            'flex items-baseline gap-3 px-3 py-2.5',
+            index > 0 && 'border-t border-dashed border-line',
+          )}
+        >
+          <dt className="w-20 shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+            {row.label}
+          </dt>
+          <dd className="min-w-0 text-sm text-ink/90">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -120,11 +150,81 @@ export function PostDetailView({ postId }: { postId: string }) {
   const filled = post.capacity > 0 ? Math.min(1, post.memberCount / post.capacity) : 0;
   const full = remaining <= 0;
   const urgent = !full && remaining <= 1;
-  const gameTone = toneOf(post.game?.name ?? '游戏局');
+  const domain = domainOf(post.domain);
+  const primary =
+    post.game?.name ?? post.concert?.artist ?? post.travel?.destination ?? '这个局';
+  const gameTone = toneOf(primary);
   const authorTone = toneOf(post.author.nickname);
   const toneClass = full ? 'text-ink-faint' : urgent ? 'text-amber' : 'text-lime';
   const barClass = full ? 'bg-ink-faint/40' : urgent ? 'bg-amber' : 'bg-lime';
   const isMember = post.isAuthor || post.members.some((member) => member.userId === myId);
+
+  const concertRows = post.concert
+    ? [
+        { label: 'Artist', value: post.concert.artist },
+        ...(post.concert.tourName ? [{ label: '巡演', value: post.concert.tourName }] : []),
+        { label: '场馆', value: post.concert.venue ?? '待定' },
+        {
+          label: '座位',
+          value: post.concert.seatType
+            ? (CONCERT_SEAT_LABELS[post.concert.seatType as ConcertSeat] ?? post.concert.seatType)
+            : '未填写',
+        },
+        {
+          label: '票务',
+          value: post.concert.hasTicket
+            ? (post.concert.ticketNote ?? '票已自备')
+            : '还没票，只找同行',
+        },
+      ]
+    : [];
+
+  const travelRows = post.travel
+    ? [
+        { label: '目的地', value: post.travel.destination },
+        { label: '行程', value: formatDateRange(post.startTime, post.endTime) },
+        {
+          label: '人均预算',
+          value: formatBudget(post.travel.budgetMin, post.travel.budgetMax),
+        },
+        {
+          label: '交通',
+          value: post.travel.transport
+            ? (TRAVEL_TRANSPORT_LABELS[post.travel.transport as TravelTransport] ??
+              post.travel.transport)
+            : '未填写',
+        },
+        {
+          label: '强度',
+          value: post.travel.intensity
+            ? (TRAVEL_INTENSITY_LABELS[post.travel.intensity as TravelIntensity] ??
+              post.travel.intensity)
+            : '未填写',
+        },
+        { label: '住宿', value: post.travel.shareRoom ? '接受拼房' : '住宿自理' },
+      ]
+    : [];
+
+  const gameRows = post.game
+    ? [
+        { label: '游戏', value: post.game.name },
+        {
+          label: '平台',
+          value: post.platform
+            ? (PLATFORM_LABELS[post.platform as Platform] ?? post.platform)
+            : '未填写',
+        },
+        { label: '模式', value: post.mode ?? '未填写' },
+        {
+          label: '段位',
+          value:
+            post.rankMin || post.rankMax
+              ? `${post.rankMin ?? '不限'} – ${post.rankMax ?? '不限'}`
+              : '不限',
+        },
+        { label: '语音', value: post.needVoice ? '要求开麦' : '不强制' },
+      ]
+    : [];
 
   return (
     <main className="pb-24 md:pb-12">
@@ -134,12 +234,12 @@ export function PostDetailView({ postId }: { postId: string }) {
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 text-[10px] font-bold',
+                'inline-flex max-w-[60%] items-center gap-1.5 rounded-[3px] px-2 py-1 text-[10px] font-bold',
                 gameTone.fill,
               )}
             >
-              <span className={cn('size-1.5 rounded-full', gameTone.dot)} />
-              {post.game?.name ?? '游戏局'}
+              <span className={cn('size-1.5 shrink-0 rounded-full', gameTone.dot)} />
+              <span className="truncate">{primary}</span>
             </span>
             <span
               className={cn(
@@ -149,16 +249,30 @@ export function PostDetailView({ postId }: { postId: string }) {
             >
               {POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}
             </span>
-            {post.platform ? (
+            {domain === 'GAME' && post.platform ? (
               <Badge variant="outline">
                 {PLATFORM_LABELS[post.platform as Platform] ?? post.platform}
               </Badge>
             ) : null}
-            {post.needVoice ? (
+            {domain === 'GAME' && post.needVoice ? (
               <Badge className="border-ice/30 bg-ice/10 text-ice">
                 <MicIcon className="size-3" />
                 需开麦
               </Badge>
+            ) : null}
+            {domain === 'CONCERT' && post.concert ? (
+              <Badge
+                className={
+                  post.concert.hasTicket
+                    ? 'border-lime/30 bg-lime/10 text-lime'
+                    : 'border-amber/30 bg-amber/10 text-amber'
+                }
+              >
+                {post.concert.hasTicket ? '票已自备' : '还没票'}
+              </Badge>
+            ) : null}
+            {domain === 'TRAVEL' && post.travel?.shareRoom ? (
+              <Badge className="border-tone-3/30 bg-tone-3/10 text-tone-3">可拼房</Badge>
             ) : null}
           </div>
           {post.isAuthor ? null : <ReportDialog targetType="POST" targetId={post.id} />}
@@ -169,9 +283,13 @@ export function PostDetailView({ postId }: { postId: string }) {
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
           <span className="inline-flex items-center gap-1.5">
             <ClockIcon className="size-4" />
-            {formatPostTime(post.startTime)}
+            {domain === 'TRAVEL'
+              ? formatDateRange(post.startTime, post.endTime)
+              : formatPostTime(post.startTime)}
           </span>
-          {post.city ? <span>· {post.city}</span> : null}
+          {post.city ? (
+            <span>{domain === 'TRAVEL' ? `· 从${post.city}出发` : `· ${post.city}`}</span>
+          ) : null}
         </div>
 
         <Card className="mt-5 bg-stage">
@@ -217,21 +335,42 @@ export function PostDetailView({ postId }: { postId: string }) {
           </div>
         </Card>
 
+        {domain === 'CONCERT' && post.concert ? (
+          <section className="mt-6">
+            <SectionLabel>演出信息</SectionLabel>
+            <InfoGrid rows={concertRows} />
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+              这里只做同行匹配，不提供任何票务交易或转售。
+            </p>
+          </section>
+        ) : null}
+
+        {domain === 'TRAVEL' && post.travel ? (
+          <section className="mt-6">
+            <SectionLabel>行程信息</SectionLabel>
+            <InfoGrid rows={travelRows} />
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+              交通与住宿请自行确认，平台不代订，也不参与费用结算。
+            </p>
+          </section>
+        ) : null}
+
+        {domain === 'GAME' && post.game ? (
+          <section className="mt-6">
+            <SectionLabel>游戏信息</SectionLabel>
+            <InfoGrid rows={gameRows} />
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+              {gameModuleOf(post.game.name).tagline}
+            </p>
+          </section>
+        ) : null}
+
         <section className="mt-6">
           <SectionLabel>说明</SectionLabel>
           <p className="mt-2 whitespace-pre-wrap border-l-2 border-accent/30 pl-3 text-sm leading-relaxed text-ink/90">
             {post.description}
           </p>
         </section>
-
-        {post.rankMin || post.rankMax ? (
-          <section className="mt-6">
-            <SectionLabel>段位要求</SectionLabel>
-            <p className="mt-2 text-sm text-ink/90">
-              {post.rankMin ?? '不限'} - {post.rankMax ?? '不限'}
-            </p>
-          </section>
-        ) : null}
 
         <section className="mt-6">
           <div className="flex items-center justify-between">

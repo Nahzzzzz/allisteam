@@ -3,18 +3,77 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import Redis from 'ioredis';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AppExceptionFilter } from '../src/common/filters/app-exception.filter';
 import { requestIdMiddleware } from '../src/common/middleware/request-id.middleware';
+import { RedisService } from '../src/common/redis/redis.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 export const hasTestDb = Boolean(process.env.TEST_DATABASE_URL);
 
+/**
+ * 测试不连真实 Redis：限流、缓存、在线状态都是旁路依赖，
+ * 连 Upstash 会让用例受网络抖动影响，还可能把限流键带到下一个用例。
+ */
+class InMemoryRedis {
+  private readonly values = new Map<string, { value: string; expiresAt: number | null }>();
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  private read(key: string): string | null {
+    const entry = this.values.get(key);
+    if (!entry) {
+      return null;
+    }
+    if (entry.expiresAt !== null && entry.expiresAt <= Date.now()) {
+      this.values.delete(key);
+      return null;
+    }
+    return entry.value;
+  }
+
+  async ping(): Promise<string> {
+    return 'PONG';
+  }
+
+  async get(key: string): Promise<string | null> {
+    return this.read(key);
+  }
+
+  async setEx(key: string, value: string, ttlSeconds: number): Promise<void> {
+    this.values.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+  }
+
+  async del(key: string): Promise<void> {
+    this.values.delete(key);
+  }
+
+  async incrWithTtl(key: string, ttlSeconds: number): Promise<number> {
+    const count = Number(this.read(key) ?? '0') + 1;
+    this.values.set(key, { value: String(count), expiresAt: Date.now() + ttlSeconds * 1000 });
+    return count;
+  }
+
+  async setNxPx(key: string, value: string, ttlMs: number): Promise<boolean> {
+    if (this.read(key) !== null) {
+      return false;
+    }
+    this.values.set(key, { value, expiresAt: Date.now() + ttlMs });
+    return true;
+  }
+}
+
 export async function createTestApp(): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication({ logger: false });
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(RedisService)
+    .useValue(new InMemoryRedis())
+    .compile();
+  const app = moduleRef.createNestApplication({
+    logger: process.env.TEST_DEBUG ? ['error', 'warn'] : false,
+  });
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
   app.use(requestIdMiddleware);
@@ -25,36 +84,11 @@ export async function createTestApp(): Promise<INestApplication> {
 
 export async function resetDatabase(app: INestApplication): Promise<void> {
   const prisma = app.get(PrismaService);
-  await prisma.$executeRaw`TRUNCATE "Review","Message","PostMember","Application","Post","GameInfo","GameProfile","Game","RefreshToken","Block","Notification","Report","User" CASCADE`;
-  await clearEphemeralRedis();
+  await prisma.$executeRaw`TRUNCATE "Review","Message","PostMember","Application","Post","GameInfo","ConcertInfo","TravelInfo","GameProfile","Game","RefreshToken","Block","Notification","Report","User" CASCADE`;
 
-  // 游戏字典有 5 分钟缓存，测试直接清掉，避免上一个用例的游戏列表污染下一个
-  await clearKeyPattern('cache:*');
-}
-
-let rateLimitClient: Redis | null = null;
-
-/**
- * 集成测试与开发共用同一个 Redis：注册/发局都有限流，游戏字典还有缓存。
- * 每个用例前清掉这些瞬时键，避免用例之间互相 429 或读到过期缓存。
- */
-async function clearEphemeralRedis(): Promise<void> {
-  await clearKeyPattern('rl:*');
-}
-
-async function clearKeyPattern(pattern: string): Promise<void> {
-  const url = process.env.REDIS_URL;
-  if (!url) {
-    return;
-  }
-  rateLimitClient ??= new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 2 });
-  if (rateLimitClient.status === 'wait') {
-    await rateLimitClient.connect();
-  }
-  const keys = await rateLimitClient.keys(pattern);
-  if (keys.length > 0) {
-    await rateLimitClient.del(...keys);
-  }
+  // 每个用例重置限流计数与游戏字典缓存，避免用例之间互相污染
+  const redis = app.get(RedisService) as unknown as { clear?: () => void };
+  redis.clear?.();
 }
 
 export async function createGame(app: INestApplication, name: string): Promise<string> {

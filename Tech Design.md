@@ -4,7 +4,7 @@
 | --- | --- |
 | 文档版本 | v1.0 |
 | 对应产品文档 | `PRD.md` |
-| 目标版本 | V1（游戏领域），架构预留演唱会 / 旅游 |
+| 目标版本 | V1（游戏领域）+ V1.5（演唱会、旅游，已实现） |
 
 ---
 
@@ -12,7 +12,7 @@
 
 ### 1.1 设计目标
 
-1. V1 只做游戏领域，但数据模型与代码结构必须能在**不重构业务层**的前提下增加演唱会、旅游。
+1. 游戏领域是 V1 主场景；演唱会、旅游按同一套扩展机制落地（`ConcertInfo` / `TravelInfo`），业务层不复制一套状态机。
 2. 单机可跑、单人可维护：本地一条命令起环境，生产环境用托管服务，不做 K8s。
 3. 关键一致性点（名额、成团）由数据库保证，不依赖应用层锁。
 4. 前后端共享类型与校验规则，避免接口字段漂移。
@@ -153,12 +153,16 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Domain           { GAME CONCERT TRAVEL }
 enum Platform         { PC PLAYSTATION XBOX SWITCH MOBILE }
+enum ConcertSeat      { STAND INNER UNDECIDED }
+enum TravelTransport  { PLANE TRAIN SELF_DRIVE BUS ANY }
+enum TravelIntensity  { RELAXED MODERATE INTENSE }
 enum PostStatus       { OPEN FULL CLOSED CANCELLED }
 enum ApplyStatus      { PENDING APPROVED REJECTED WITHDRAWN LEFT }
 enum MemberRole       { HOST MEMBER }
@@ -276,6 +280,8 @@ model Post {
   author       User         @relation("AuthoredPosts", fields: [authorId], references: [id])
   game         Game?        @relation(fields: [gameId], references: [id])
   gameInfo     GameInfo?
+  concertInfo  ConcertInfo?
+  travelInfo   TravelInfo?
   applications Application[]
   members      PostMember[]
   messages     Message[]
@@ -300,6 +306,38 @@ model GameInfo {
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([gameId, platform])
+}
+
+/// 演唱会扩展表：场次时间复用 Post.startTime；票务只做同行匹配，不做转售。
+model ConcertInfo {
+  postId     String      @id
+  artist     String
+  tourName   String?
+  venue      String?
+  seatType   ConcertSeat @default(UNDECIDED)
+  hasTicket  Boolean     @default(true)
+  ticketNote String?
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([artist])
+  @@index([artist(ops: raw("gin_trgm_ops"))], type: Gin, map: "ConcertInfo_artist_trgm_idx")
+}
+
+/// 旅游扩展表：Post.startTime / endTime 分别是出发与返程日期。
+model TravelInfo {
+  postId      String          @id
+  destination String
+  budgetMin   Int?
+  budgetMax   Int?
+  transport   TravelTransport @default(ANY)
+  intensity   TravelIntensity @default(MODERATE)
+  shareRoom   Boolean         @default(false)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([destination(ops: raw("gin_trgm_ops"))], type: Gin, map: "TravelInfo_destination_trgm_idx")
+  @@index([budgetMax])
 }
 
 model Application {
@@ -418,9 +456,11 @@ model Block {
 ALTER TABLE "Post" ADD CONSTRAINT post_capacity_range CHECK (capacity BETWEEN 2 AND 20);
 ALTER TABLE "Post" ADD CONSTRAINT post_member_count_range CHECK ("memberCount" >= 1 AND "memberCount" <= capacity);
 ALTER TABLE "Review" ADD CONSTRAINT review_rating_range CHECK (rating BETWEEN 1 AND 5);
+ALTER TABLE "TravelInfo" ADD CONSTRAINT travel_budget_range
+  CHECK ("budgetMin" IS NULL OR "budgetMax" IS NULL OR "budgetMin" <= "budgetMax");
 ```
 
-这三条 CHECK 是最后一道防线：即使应用层有 bug，也不会出现「名额 5 人却有 6 名成员」或「评分 8 星」的脏数据。
+这四条 CHECK 是最后一道防线：即使应用层有 bug，也不会出现「名额 5 人却有 6 名成员」「评分 8 星」或「预算下限高于上限」的脏数据。
 
 标题模糊搜索用的 `pg_trgm` GIN 索引写在 `Post` 的 `@@index(... type: Gin, map: "Post_title_trgm_idx")` 里（`pg_trgm` 扩展由 `20261020160001_constraints` 创建）。声明进 schema 是必须的：只在 migration 里手写 SQL 时，`prisma migrate dev` 会把它当成多余索引生成 `DROP INDEX`。
 
@@ -535,6 +575,11 @@ V1 的所有筛选都是等值或范围条件，走索引即可，不引入搜�
 | 时间范围 | `(domain, status, startTime)` 复合索引 |
 | 标题关键词 | `pg_trgm` GIN 索引：`CREATE EXTENSION pg_trgm; CREATE INDEX post_title_trgm ON "Post" USING GIN (title gin_trgm_ops);`，查询 `title ILIKE '%词%'` |
 | 段位 | 文本匹配（V1 不做区间比较，见 PRD §8） |
+| 演唱会艺人 / 巡演名 | `ConcertInfo.artist` 普通索引 + `pg_trgm` GIN；巡演名一起走模糊匹配 |
+| 演唱会座位区域 | `ConcertInfo.seatType` 等值筛选，走 `Post(domain,status,startTime)` 后按主键回表 |
+| 旅游目的地 | `TravelInfo.destination` `pg_trgm` GIN |
+| 旅游预算上限 | `TravelInfo.budgetMax` 索引；未填上限的局按「不设限」参与筛选 |
+| 旅游交通方式 | `TravelInfo.transport` 等值筛选 |
 
 数据量超过约 10 万条局或需要相关性排序时，再上 Meilisearch：以 outbox 表做增量同步，不改变对外 API 契约。
 
@@ -583,10 +628,10 @@ V1 的所有筛选都是等值或范围条件，走索引即可，不引入搜�
 | POST | `/me/games` | 是 | 新增档案（upsert 语义） |
 | DELETE | `/me/games/:id` | 是 | 删除档案 |
 | GET | `/games` | 否 | 游戏字典（缓存 1 小时） |
-| GET | `/posts` | 否 | 列表+筛选+游标分页 |
+| GET | `/posts` | 否 | 列表+筛选+游标分页（`domain=GAME/CONCERT/TRAVEL`） |
 | GET | `/me/posts` | 是 | 我发起的局（含全部状态，按创建时间倒序；每项带 `pendingApplicationCount`） |
 | GET | `/me/applications` | 是 | 我参与的局（仅 `APPROVED`，按报名时间倒序；每项带 `applicationId`/`appliedAt`） |
-| POST | `/posts` | 是 | 发局（事务内写 Post + GameInfo） |
+| POST | `/posts` | 是 | 发局（按 `domain` 分支，事务内写 `Post` + `GameInfo` / `ConcertInfo` / `TravelInfo`） |
 | GET | `/posts/:id` | 否 | 详情（含成员、我的报名状态） |
 | PATCH | `/posts/:id` | 是（作者） | 修改标题/描述/时间等 |
 | DELETE | `/posts/:id` | 是（作者） | 取消局（软取消，status=CANCELLED） |
@@ -639,6 +684,37 @@ GET /api/v1/posts?domain=GAME&gameId=xxx&platform=PC&city=成都
   "hasMore": true
 }
 ```
+
+演唱会与旅游共用同一套游标分页，只是筛选参数不同：
+
+```
+GET /api/v1/posts?domain=CONCERT&artist=陈粒&seatType=INNER&city=上海&limit=20
+GET /api/v1/posts?domain=TRAVEL&destination=大理&budgetMax=4000&transport=TRAIN&limit=20
+```
+
+响应在游戏字段之外，按领域带 `concert` 或 `travel` 对象；非对应领域时为 `null`：
+
+```json
+{
+  "id": "clx...",
+  "title": "陈粒上海站内场找同行",
+  "domain": "CONCERT",
+  "game": null,
+  "concert": {
+    "artist": "陈粒",
+    "tourName": "洄游",
+    "venue": "梅赛德斯-奔驰文化中心",
+    "seatType": "INNER",
+    "hasTicket": true,
+    "ticketNote": "内场 B 区"
+  },
+  "travel": null,
+  "startTime": "2026-10-24T11:00:00.000Z",
+  "endTime": null
+}
+```
+
+旅游局把 `startTime` / `endTime` 当作出发与返程日期，`travel.budgetMin` / `budgetMax` 为整数元；`budgetMax` 筛选会把「未填上限」视为不设限。
 
 ### 7.3 错误契约
 
@@ -745,14 +821,15 @@ NEXT_PUBLIC_WS_URL=ws://localhost:3001
 
 密钥只放在 `.env.local`（git 忽略）与平台 Secret 中。
 
-## 12. 演进到多领域（V1.5 检查清单）
+## 12. 多领域落地记录（V1.5 已完成）
 
-1. 新增 `ConcertInfo` / `TravelInfo` 模型并迁移；`Post` 主表不动。
-2. `packages/shared`：zod 增加 `concertPayload` / `travelPayload` 分支；`Domain` 枚举已存在。
-3. `PostsService.create` 增加分支；`PostsController` 的 `POST /posts` 用 discriminated union 校验。
-4. 列表接口增加 `artist`、`destCity`、`budgetMax`、`dateFrom/dateTo` 参数与对应索引。
-5. 前端新增发布表单与筛选面板，复用同一列表组件与卡片骨架。
-6. 更新 PRD §6 与本文档 §5，跑一遍全量回归。
+1. `ConcertInfo` / `TravelInfo` 模型与迁移已落地（`20261020164310_multi_domain_concert_travel`、`20261020165000_travel_budget_check`）；`Post` 主表只增加关系，不改业务字段。
+2. `packages/shared`：`createPostSchema` 用 discriminated union 分三支，列表筛选参数增加 `domain`、`artist`、`seatType`、`destination`、`budgetMax`、`transport`。
+3. `PostsService.create` / `list` 增加领域分支；列表按 `domain` 过滤，领域条件通过扩展表 relation 过滤，不改变游标契约。
+4. 索引：`Post(domain,status,startTime)`、`ConcertInfo.artist`（普通 + `pg_trgm` GIN）、`TravelInfo.destination`（`pg_trgm` GIN）、`TravelInfo.budgetMax`。
+5. 前端发布表单、首页筛选、卡片与详情页复用同一套票券组件，按领域切换字段与配色。
+6. 集成测试：`apps/api/test/multi-domain.e2e-spec.ts` 覆盖演唱会 / 旅游发布、筛选与非法输入。
+7. 迁移顺序修正：早期提交的 `20261020130931_m5_trust_indexes` 时间戳早于 `init`，会把索引建在空库上失败；已重命名为 `20261020170000_m5_trust_indexes`。已有开发 / 测试库需执行一次迁移历史修复（删除旧记录与旧索引后 `prisma migrate deploy`），新库无需处理。
 
 ## 13. 风险与备选方案
 

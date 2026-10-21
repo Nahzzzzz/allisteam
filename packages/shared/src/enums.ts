@@ -21,6 +21,37 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   MOBILE: '手游',
 };
 
+/** 演唱会座位区域：看台 / 内场 / 还没定 */
+export const concertSeatSchema = z.enum(['STAND', 'INNER', 'UNDECIDED']);
+export type ConcertSeat = z.infer<typeof concertSeatSchema>;
+
+export const CONCERT_SEAT_LABELS: Record<ConcertSeat, string> = {
+  STAND: '看台',
+  INNER: '内场',
+  UNDECIDED: '座位未定',
+};
+
+export const travelTransportSchema = z.enum(['PLANE', 'TRAIN', 'SELF_DRIVE', 'BUS', 'ANY']);
+export type TravelTransport = z.infer<typeof travelTransportSchema>;
+
+export const TRAVEL_TRANSPORT_LABELS: Record<TravelTransport, string> = {
+  PLANE: '飞机',
+  TRAIN: '高铁 / 火车',
+  SELF_DRIVE: '自驾',
+  BUS: '大巴',
+  ANY: '都行',
+};
+
+/** 行程强度：躺平 / 正常 / 特种兵，筛人时比目的地更能决定合不合拍 */
+export const travelIntensitySchema = z.enum(['RELAXED', 'MODERATE', 'INTENSE']);
+export type TravelIntensity = z.infer<typeof travelIntensitySchema>;
+
+export const TRAVEL_INTENSITY_LABELS: Record<TravelIntensity, string> = {
+  RELAXED: '躺平行',
+  MODERATE: '正常节奏',
+  INTENSE: '特种兵',
+};
+
 export const postStatusSchema = z.enum(['OPEN', 'FULL', 'CLOSED', 'CANCELLED']);
 export type PostStatus = z.infer<typeof postStatusSchema>;
 

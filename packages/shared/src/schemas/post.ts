@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { domainSchema, platformSchema } from '../enums';
+import { concertSeatSchema, domainSchema, platformSchema, travelTransportSchema, travelIntensitySchema } from '../enums';
 import { paginationQuerySchema } from './pagination';
 import type { PublicUser } from './user';
 
@@ -16,6 +16,47 @@ export const gamePostPayloadSchema = z
   })
   .strict();
 
+export type GamePostPayload = z.infer<typeof gamePostPayloadSchema>;
+
+/**
+ * 演唱会只做「找同行的人」，票务必须自己解决。
+ * `hasTicket` 是合规开关：false 表示「还没票，只找同行」，前端会给出一条免责提示。
+ */
+export const concertPostPayloadSchema = z
+  .object({
+    artist: z.string().trim().min(1, '请填写艺人').max(40),
+    tourName: z.string().trim().max(60).optional(),
+    venue: z.string().trim().max(60).optional(),
+    seatType: concertSeatSchema.optional(),
+    hasTicket: z.boolean().optional(),
+    ticketNote: z.string().trim().max(200).optional(),
+  })
+  .strict();
+
+export type ConcertPostPayload = z.infer<typeof concertPostPayloadSchema>;
+
+/** 旅游用 Post.endTime 表示返程日期，预算用整数元，不存小数 */
+export const travelPostPayloadSchema = z
+  .object({
+    destination: z.string().trim().min(1, '请填写目的地').max(40),
+    budgetMin: z.number().int().min(0).max(1_000_000).optional(),
+    budgetMax: z.number().int().min(0).max(1_000_000).optional(),
+    transport: travelTransportSchema.optional(),
+    intensity: travelIntensitySchema.optional(),
+    /** 是否接受拼房；未成年人禁止发布含住宿合住内容的局，前端会拦截 */
+    shareRoom: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.budgetMin === undefined ||
+      value.budgetMax === undefined ||
+      value.budgetMin <= value.budgetMax,
+    { path: ['budgetMax'], message: '预算上限不能低于下限' },
+  );
+
+export type TravelPostPayload = z.infer<typeof travelPostPayloadSchema>;
+
 const postBaseShape = {
   title: z.string().trim().min(8).max(40),
   description: z.string().trim().min(1).max(1000),
@@ -24,7 +65,7 @@ const postBaseShape = {
   capacity: z.number().int().min(2).max(20),
 };
 
-/** 发局：按 domain 区分载荷，V1 只开放 GAME 分支 */
+/** 发局：按 domain 区分载荷，三个领域各一支 */
 export const createPostSchema = z.discriminatedUnion('domain', [
   z
     .object({
@@ -33,9 +74,30 @@ export const createPostSchema = z.discriminatedUnion('domain', [
       game: gamePostPayloadSchema,
     })
     .strict(),
+  z
+    .object({
+      domain: z.literal('CONCERT'),
+      ...postBaseShape,
+      /** 看演出不用「结束时间」，散场时间因场次而异，不强制填 */
+      endTime: isoDateTimeSchema.optional(),
+      concert: concertPostPayloadSchema,
+    })
+    .strict(),
+  z
+    .object({
+      domain: z.literal('TRAVEL'),
+      ...postBaseShape,
+      /** 旅游必须有返程日期，用来算行程天数和展示日期区间 */
+      endTime: isoDateTimeSchema,
+      travel: travelPostPayloadSchema,
+    })
+    .strict(),
 ]);
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;
+export type ConcertCreateInput = Extract<CreatePostInput, { domain: 'CONCERT' }>;
+export type TravelCreateInput = Extract<CreatePostInput, { domain: 'TRAVEL' }>;
+export type GameCreateInput = Extract<CreatePostInput, { domain: 'GAME' }>;
 
 export const updatePostSchema = z
   .object({
@@ -59,6 +121,13 @@ export const listPostsQuerySchema = paginationQuerySchema
     startFrom: isoDateTimeSchema.optional(),
     startTo: isoDateTimeSchema.optional(),
     q: z.string().trim().min(1).max(50).optional(),
+    /** 演唱会：按艺人（含巡演名）模糊搜 */
+    artist: z.string().trim().min(1).max(40).optional(),
+    seatType: concertSeatSchema.optional(),
+    /** 旅游：按目的地模糊搜 */
+    destination: z.string().trim().min(1).max(40).optional(),
+    budgetMax: z.coerce.number().int().min(0).max(1_000_000).optional(),
+    transport: travelTransportSchema.optional(),
   })
   .strict();
 
@@ -74,17 +143,44 @@ export const myApplicationsQuerySchema = paginationQuerySchema.strict();
 
 export type MyApplicationsQuery = z.infer<typeof myApplicationsQuerySchema>;
 
+/** 演唱会局的独有属性，非演唱会局为 null */
+export interface ConcertSummary {
+  artist: string;
+  tourName: string | null;
+  venue: string | null;
+  seatType: string | null;
+  hasTicket: boolean;
+  ticketNote: string | null;
+}
+
+/** 旅游局的独有属性，非旅游局为 null */
+export interface TravelSummary {
+  destination: string;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  transport: string | null;
+  intensity: string | null;
+  shareRoom: boolean;
+}
+
 export interface PostSummary {
   id: string;
   title: string;
   domain: string;
+  /** 游戏局专有，其余领域为 null / false */
   game: { id: string; name: string } | null;
   platform: string | null;
   mode: string | null;
   rankMin: string | null;
   rankMax: string | null;
   needVoice: boolean;
+  concert: ConcertSummary | null;
+  travel: TravelSummary | null;
   startTime: string;
+  /** 旅游局的返程日期；其余领域通常为 null */
+  endTime: string | null;
+  /** 城市：线下见面的局会填 */
+  city: string | null;
   capacity: number;
   memberCount: number;
   status: string;

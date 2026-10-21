@@ -22,6 +22,29 @@ enum Platform {
   MOBILE
 }
 
+/// 演唱会座位区域：看台 / 内场 / 还没定
+enum ConcertSeat {
+  STAND
+  INNER
+  UNDECIDED
+}
+
+/// 旅游交通方式
+enum TravelTransport {
+  PLANE
+  TRAIN
+  SELF_DRIVE
+  BUS
+  ANY
+}
+
+/// 行程强度
+enum TravelIntensity {
+  RELAXED
+  MODERATE
+  INTENSE
+}
+
 enum PostStatus {
   OPEN
   FULL
@@ -184,6 +207,8 @@ model Post {
   author       User          @relation("AuthoredPosts", fields: [authorId], references: [id])
   game         Game?         @relation(fields: [gameId], references: [id])
   gameInfo     GameInfo?
+  concertInfo  ConcertInfo?
+  travelInfo   TravelInfo?
   applications Application[]
   members      PostMember[]
   messages     Message[]
@@ -210,6 +235,42 @@ model GameInfo {
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([gameId, platform])
+}
+
+/// 演唱会扩展表。startTime 同时充当「场次时间」，票务信息只做同行匹配，不做转售。
+model ConcertInfo {
+  postId     String      @id
+  artist     String
+  tourName   String?
+  venue      String?
+  seatType   ConcertSeat @default(UNDECIDED)
+  hasTicket  Boolean     @default(true)
+  ticketNote String?
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // 按艺人模糊搜索走 pg_trgm，和 Post.title 一致；座位区域是低基数列，
+  // 等值筛选先走 Post(domain,status,startTime) 再按主键回表，不单独建索引
+  @@index([artist])
+  @@index([artist(ops: raw("gin_trgm_ops"))], type: Gin, map: "ConcertInfo_artist_trgm_idx")
+}
+
+/// 旅游扩展表。Post.startTime / endTime 分别是出发与返程日期。
+model TravelInfo {
+  postId      String          @id
+  destination String
+  budgetMin   Int?
+  budgetMax   Int?
+  transport   TravelTransport @default(ANY)
+  intensity   TravelIntensity @default(MODERATE)
+  /// 是否接受拼房；V1 不支持未成年人发布含住宿合住内容的局
+  shareRoom   Boolean         @default(false)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([destination(ops: raw("gin_trgm_ops"))], type: Gin, map: "TravelInfo_destination_trgm_idx")
+  // 按预算上限筛选（budgetMax <= ?）走这条；交通方式是低基数列，同座位区域走回表
+  @@index([budgetMax])
 }
 
 model Application {

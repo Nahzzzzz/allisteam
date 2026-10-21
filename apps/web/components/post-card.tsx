@@ -1,7 +1,18 @@
 import Link from 'next/link';
-import { PLATFORM_LABELS, type Platform, type PostSummary } from '@allisteam/shared';
+import {
+  CONCERT_SEAT_LABELS,
+  PLATFORM_LABELS,
+  TRAVEL_INTENSITY_LABELS,
+  TRAVEL_TRANSPORT_LABELS,
+  type ConcertSeat,
+  type Platform,
+  type PostSummary,
+  type TravelIntensity,
+  type TravelTransport,
+} from '@allisteam/shared';
 import { MicIcon, StarIcon } from '@/components/icons';
-import { formatClock, ticketDateParts } from '@/lib/format';
+import { domainOf } from '@/lib/domain';
+import { formatBudget, formatClock, formatDateRange, ticketDateParts } from '@/lib/format';
 import { toneOf } from '@/lib/tone';
 import { cn } from '@/lib/utils';
 
@@ -14,9 +25,21 @@ export function PostCard({ post }: { post: PostSummary }) {
   const full = remaining <= 0;
   const urgent = !full && remaining <= 1;
 
-  const tone = toneOf(post.game?.name ?? '游戏局');
+  const domain = domainOf(post.domain);
+  const primary = post.game?.name ?? post.concert?.artist ?? post.travel?.destination ?? '局';
+  const tone = toneOf(primary);
   const authorTone = toneOf(post.author.nickname);
   const date = ticketDateParts(post.startTime);
+
+  const seatLabel = post.concert?.seatType
+    ? (CONCERT_SEAT_LABELS[post.concert.seatType as ConcertSeat] ?? post.concert.seatType)
+    : null;
+  const transportLabel = post.travel?.transport
+    ? (TRAVEL_TRANSPORT_LABELS[post.travel.transport as TravelTransport] ?? post.travel.transport)
+    : null;
+  const intensityLabel = post.travel?.intensity
+    ? (TRAVEL_INTENSITY_LABELS[post.travel.intensity as TravelIntensity] ?? post.travel.intensity)
+    : null;
   const rank =
     post.rankMin || post.rankMax
       ? `${post.rankMin ?? '不限'}–${post.rankMax ?? '不限'}`
@@ -34,33 +57,66 @@ export function PostCard({ post }: { post: PostSummary }) {
             <div className="flex items-center gap-1.5">
               <span
                 className={cn(
-                  'rounded-[3px] px-1.5 py-1 text-[10px] font-bold leading-none',
+                  'max-w-[46%] truncate rounded-[3px] px-1.5 py-1 text-[10px] font-bold leading-none',
                   tone.fill,
                 )}
               >
-                {post.game?.name ?? '游戏'}
+                {primary}
               </span>
 
-              {post.platform ? (
-                <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-muted">
-                  {PLATFORM_LABELS[post.platform as Platform] ?? post.platform}
-                </span>
-              ) : null}
-
-              {post.mode ? (
+              {domain === 'GAME' ? (
                 <>
-                  <span aria-hidden="true" className="text-[10px] text-ink-faint/70">
-                    /
-                  </span>
-                  <span className="truncate text-[10px] text-ink-muted">{post.mode}</span>
+                  {post.platform ? (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-muted">
+                      {PLATFORM_LABELS[post.platform as Platform] ?? post.platform}
+                    </span>
+                  ) : null}
+
+                  {post.mode ? (
+                    <>
+                      <span aria-hidden="true" className="text-[10px] text-ink-faint/70">
+                        /
+                      </span>
+                      <span className="truncate text-[10px] text-ink-muted">{post.mode}</span>
+                    </>
+                  ) : null}
+
+                  {post.needVoice ? (
+                    <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-ice">
+                      <MicIcon className="size-3" />
+                      开麦
+                    </span>
+                  ) : null}
                 </>
               ) : null}
 
-              {post.needVoice ? (
-                <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-ice">
-                  <MicIcon className="size-3" />
-                  开麦
+              {domain === 'CONCERT' && seatLabel ? (
+                <span className="shrink-0 rounded-[3px] border border-line-strong/60 px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
+                  {seatLabel}
                 </span>
+              ) : null}
+
+              {domain === 'CONCERT' ? (
+                <span
+                  className={cn(
+                    'ml-auto shrink-0 rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold',
+                    post.concert?.hasTicket
+                      ? 'bg-lime/15 text-lime'
+                      : 'bg-amber/15 text-amber',
+                  )}
+                >
+                  {post.concert?.hasTicket ? '票已自备' : '还没票'}
+                </span>
+              ) : null}
+
+              {domain === 'TRAVEL' && transportLabel ? (
+                <span className="shrink-0 rounded-[3px] border border-line-strong/60 px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
+                  {transportLabel}
+                </span>
+              ) : null}
+
+              {domain === 'TRAVEL' && intensityLabel ? (
+                <span className="shrink-0 text-[10px] text-ink-muted">{intensityLabel}</span>
               ) : null}
             </div>
 
@@ -69,13 +125,33 @@ export function PostCard({ post }: { post: PostSummary }) {
             </h2>
 
             <div className="mt-2 flex items-center gap-2 font-mono text-[11px] tabular-nums">
-              <span className="text-[12px] font-semibold text-ink">{formatClock(post.startTime)}</span>
-              <span aria-hidden="true" className="h-2.5 w-px bg-line-strong" />
-              <span className="truncate text-ink-faint">{rank}</span>
+              {domain === 'TRAVEL' ? (
+                <>
+                  <span className="text-[12px] font-semibold text-ink">
+                    {formatDateRange(post.startTime, post.endTime)}
+                  </span>
+                  <span aria-hidden="true" className="h-2.5 w-px bg-line-strong" />
+                  <span className="truncate text-ink-faint">
+                    {formatBudget(post.travel?.budgetMin ?? null, post.travel?.budgetMax ?? null)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[12px] font-semibold text-ink">
+                    {formatClock(post.startTime)}
+                  </span>
+                  <span aria-hidden="true" className="h-2.5 w-px bg-line-strong" />
+                  <span className="truncate text-ink-faint">
+                    {domain === 'CONCERT'
+                      ? (post.concert?.venue ?? post.city ?? '场馆待定')
+                      : rank}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* 小票日期块：周几 / 日 / 月。每张卡按游戏色实心，扫列表时先看颜色再看数字 */}
+          {/* 小票日期块：周几 / 日 / 月。每张卡按主标签色实心，扫列表时先看颜色再看数字 */}
           <div className="w-[46px] shrink-0 self-start overflow-hidden rounded-[6px] border border-line-strong/40 text-center">
             <p className={cn('py-1 text-[9px] font-bold leading-none', tone.fill)}>{date.top}</p>
             <p className="bg-canvas/50 py-1 font-mono text-[19px] font-black leading-none tabular-nums text-ink">

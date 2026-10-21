@@ -3,8 +3,9 @@
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import type { Paginated, PostSummary } from '@allisteam/shared';
+import type { Domain, Paginated, PostSummary } from '@allisteam/shared';
 import { apiFetch } from '@/lib/api';
+import { DOMAIN_META, domainOf } from '@/lib/domain';
 import { queryKeys } from '@/lib/query-keys';
 import { AlertIcon, CompassIcon } from '@/components/icons';
 import { PostCard } from '@/components/post-card';
@@ -15,9 +16,16 @@ import { EmptyState } from '@/components/ui/empty-state';
 const PAGE_SIZE = 10;
 
 export interface PostFilters {
+  domain?: string;
   q?: string;
   gameId?: string;
   platform?: string;
+  city?: string;
+  artist?: string;
+  seatType?: string;
+  destination?: string;
+  budgetMax?: string;
+  transport?: string;
   startFrom?: string;
   startTo?: string;
 }
@@ -93,13 +101,22 @@ export function PostsList({ filters }: { filters: PostFilters }) {
   }
 
   if (posts.length === 0) {
+    const domain = domainOf(filters.domain);
+    const hint: Record<Domain, string> = {
+      GAME: '换个游戏或放宽时间试试，也可以自己开一局等人来。',
+      CONCERT: '换个艺人或放宽日期试试，也可以自己发一场找人同行。',
+      TRAVEL: '换个目的地或放宽预算试试，也可以自己发起一段行程。',
+    };
     return (
       <EmptyState
         icon={<CompassIcon />}
         title="还没有符合条件的局"
-        description="换个游戏或放宽时间试试，也可以自己开一局等人来。"
+        description={hint[domain]}
         action={
-          <Link href="/posts/new" className={buttonVariants({ size: 'md' })}>
+          <Link
+            href={domain === 'GAME' ? '/posts/new' : `/posts/new?domain=${domain}`}
+            className={buttonVariants({ size: 'md' })}
+          >
             发一个自己的局
           </Link>
         }
@@ -107,12 +124,17 @@ export function PostsList({ filters }: { filters: PostFilters }) {
     );
   }
 
+  const domain = domainOf(filters.domain);
+
   return (
     <section className="mt-6">
       <div className="mb-3 flex items-end justify-between gap-2 border-b-2 border-line pb-2">
         <h2 className="flex items-baseline gap-2 text-[13px] font-bold tracking-tight">
           <span className="size-1.5 translate-y-[-1px] animate-pulse-dot rounded-full bg-lime" />
           正在招募
+          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+            {DOMAIN_META[domain].code}
+          </span>
         </h2>
         <span className="font-mono text-[10px] tabular-nums text-ink-faint">
           {posts.length} 个局

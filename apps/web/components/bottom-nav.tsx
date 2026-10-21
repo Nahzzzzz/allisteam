@@ -128,7 +128,7 @@ export function DesktopNav() {
       <div className="mt-auto">
         <div aria-hidden="true" className="color-strip mb-3 h-1 w-16 rounded-full" />
         <p className="text-[11px] leading-relaxed text-ink-faint">
-          V1 只开放游戏局。演唱会与旅行局随后上线。
+          游戏、演唱会、旅行三个领域都已开放。发布时选一张票根，写清条件就行。
         </p>
         <p className="mt-3 flex items-center gap-1.5 font-mono text-[10px] tracking-wider text-ink-faint">
           <span className="size-1.5 rounded-full bg-lime" />

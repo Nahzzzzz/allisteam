@@ -72,6 +72,54 @@ export function localInputToIso(value: string): string {
   return new Date(value).toISOString();
 }
 
+/** 旅游局跨几天：按 24 小时折算，四舍五入到整天 */
+export function tripDays(startIso: string, endIso: string | null): number | null {
+  if (!endIso) {
+    return null;
+  }
+  const diff = new Date(endIso).getTime() - new Date(startIso).getTime();
+  return Math.max(1, Math.round(diff / 86_400_000));
+}
+
+/** 旅游局的日期区间：11/02 – 11/06 · 5 天 */
+export function formatDateRange(startIso: string, endIso: string | null): string {
+  const start = new Date(startIso);
+  const startLabel = `${start.getMonth() + 1}/${start.getDate()}`;
+  const days = tripDays(startIso, endIso);
+  if (!endIso || days === null) {
+    return startLabel;
+  }
+  const end = new Date(endIso);
+  return `${startLabel} – ${end.getMonth() + 1}/${end.getDate()} · ${days} 天`;
+}
+
+/** 列表里的时间标签：旅游局展示日期区间，其余按「今天 / 明天」规则 */
+export function postTimeLabel(post: {
+  domain?: string;
+  startTime: string;
+  endTime: string | null;
+}): string {
+  if (post.domain === 'TRAVEL' && post.endTime) {
+    return formatDateRange(post.startTime, post.endTime);
+  }
+  return formatPostTime(post.startTime);
+}
+
+/** 人均预算：¥2,000–4,000 / ¥4,000 以内 / 预算不限 */
+export function formatBudget(min: number | null, max: number | null): string {
+  const money = (value: number): string => `¥${value.toLocaleString('en-US')}`;
+  if (min !== null && max !== null) {
+    return `${money(min)}–${max.toLocaleString('en-US')}`;
+  }
+  if (max !== null) {
+    return `${money(max)} 以内`;
+  }
+  if (min !== null) {
+    return `${money(min)} 起`;
+  }
+  return '预算不限';
+}
+
 export function isoToLocalInput(iso: string): string {
   const date = new Date(iso);
   const pad = (value: number): string => String(value).padStart(2, '0');

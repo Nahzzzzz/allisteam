@@ -1,5 +1,8 @@
+import Link from 'next/link';
 import { HomeFilters } from '@/components/home-filters';
-import { PostsList } from '@/components/posts-list';
+import { PostsList, type PostFilters } from '@/components/posts-list';
+import { DOMAIN_META, DOMAIN_ORDER, domainOf } from '@/lib/domain';
+import { cn } from '@/lib/utils';
 
 interface HomePageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -23,19 +26,35 @@ function toDayEnd(value: string): string | undefined {
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
+  const domain = domainOf(pick(params.domain));
+  const meta = DOMAIN_META[domain];
 
   const initial = {
     q: pick(params.q),
     gameId: pick(params.gameId),
     platform: pick(params.platform),
+    city: pick(params.city),
+    artist: pick(params.artist),
+    seatType: pick(params.seatType),
+    destination: pick(params.destination),
+    budgetMax: pick(params.budgetMax),
+    transport: pick(params.transport),
     startFrom: pick(params.startFrom),
     startTo: pick(params.startTo),
   };
 
-  const filters = {
+  // 切换领域时只带对应领域的筛选条件，避免把 gameId 带到旅行列表里
+  const filters: PostFilters = {
+    domain,
     q: initial.q || undefined,
-    gameId: initial.gameId || undefined,
-    platform: initial.platform || undefined,
+    gameId: domain === 'GAME' ? initial.gameId || undefined : undefined,
+    platform: domain === 'GAME' ? initial.platform || undefined : undefined,
+    city: domain === 'TRAVEL' ? undefined : initial.city || undefined,
+    artist: domain === 'CONCERT' ? initial.artist || undefined : undefined,
+    seatType: domain === 'CONCERT' ? initial.seatType || undefined : undefined,
+    destination: domain === 'TRAVEL' ? initial.destination || undefined : undefined,
+    budgetMax: domain === 'TRAVEL' ? initial.budgetMax || undefined : undefined,
+    transport: domain === 'TRAVEL' ? initial.transport || undefined : undefined,
     startFrom: toDayStart(initial.startFrom),
     startTo: toDayEnd(initial.startTo),
   };
@@ -49,7 +68,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <div className="paper-print relative px-4 pb-4 pt-3">
           <div className="flex items-center justify-between font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-paper-muted">
             <span>AllieTeam Presents</span>
-            <span>Vol.01 / 2026</span>
+            <span>Vol.03 / 2026</span>
           </div>
 
           <div className="mt-4 flex items-start justify-between gap-2">
@@ -68,26 +87,32 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </span>
           </div>
 
-          <p className="mt-3 text-[13px] font-medium leading-snug text-paper-ink/70">
-            同一时间、同一游戏，
-            <br />
-            找几个玩得来的人，一起开一局。
-          </p>
+          <p className="mt-3 text-[13px] font-medium leading-snug text-paper-ink/70">{meta.intro}</p>
 
-          {/* 三个领域 = 票面上的分区块：当前开放的用实心橙，未开的只留描边 */}
+          {/* 三个领域 = 票面上并排的三个色块，当前领域的色块实心压下去 */}
           <div className="mt-4 grid grid-cols-3 gap-1.5">
-            <span className="flex items-center justify-between rounded-[4px] bg-accent px-2 py-1.5 text-[11px] font-bold text-accent-ink">
-              游戏
-              <span className="font-mono text-[8px] tracking-[0.1em]">OPEN</span>
-            </span>
-            <span className="flex items-center justify-between rounded-[4px] border border-paper-ink/15 bg-paper-2/70 px-2 py-1.5 text-[11px] font-semibold text-paper-ink/50">
-              演唱会
-              <span className="font-mono text-[8px] tracking-[0.08em]">SOON</span>
-            </span>
-            <span className="flex items-center justify-between rounded-[4px] border border-paper-ink/15 bg-paper-2/70 px-2 py-1.5 text-[11px] font-semibold text-paper-ink/50">
-              旅行
-              <span className="font-mono text-[8px] tracking-[0.08em]">SOON</span>
-            </span>
+            {DOMAIN_ORDER.map((item) => {
+              const itemMeta = DOMAIN_META[item];
+              const active = item === domain;
+              return (
+                <Link
+                  key={item}
+                  href={item === 'GAME' ? '/' : `/?domain=${item}`}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex items-center justify-between rounded-[4px] px-2 py-1.5 text-[11px] font-bold transition-colors',
+                    active
+                      ? itemMeta.solid
+                      : 'border border-paper-ink/15 bg-paper-2/70 text-paper-ink/55 hover:bg-paper-2 hover:text-paper-ink/80',
+                  )}
+                >
+                  {itemMeta.label}
+                  <span className="font-mono text-[8px] tracking-[0.06em] opacity-80">
+                    {itemMeta.code}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </div>
 
@@ -102,8 +127,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             className="perforation absolute -right-[7px] -top-[7px] size-3.5 rounded-full"
           />
           <div className="flex items-center gap-3 px-4 py-2.5">
-            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-ink-faint">
-              排位 · 开黑 · 上分
+            <span className="truncate font-mono text-[9px] uppercase tracking-[0.16em] text-ink-faint">
+              {meta.caption}
             </span>
             <span aria-hidden="true" className="barcode ml-auto h-5 w-16 text-ink-faint/60" />
             <span className="flex items-center gap-1.5 border-l border-dashed border-line-strong/70 pl-3">
@@ -114,7 +139,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
       </header>
 
-      <HomeFilters initial={initial} />
+      <HomeFilters domain={domain} initial={initial} />
       <PostsList filters={filters} />
     </main>
   );

@@ -27,8 +27,14 @@ export interface PostReviewContext {
   memberIds: string[];
 }
 
+/** 字段级校验失败统一走这个，前端能按 path 把错误落到具体输入框 */
+function validationError(path: string, message: string): AppException {
+  return new AppException('VALIDATION_FAILED', 400, '参数校验失败', [{ path, message }]);
+}
+
 @Injectable()
-export class PostsService {  constructor(
+export class PostsService {
+  constructor(
     private readonly prisma: PrismaService,
     private readonly messages: MessagesService,
     private readonly chatEvents: ChatEventsService,
@@ -61,6 +67,36 @@ export class PostsService {  constructor(
     }
     if (query.platform) {
       where.gameInfo = { platform: query.platform };
+    }
+
+    // 领域专属筛选：只在真正传了条件时加 relation 过滤，否则不动查询计划
+    const concertWhere: Prisma.ConcertInfoWhereInput = {};
+    if (query.artist) {
+      concertWhere.OR = [
+        { artist: { contains: query.artist, mode: 'insensitive' } },
+        { tourName: { contains: query.artist, mode: 'insensitive' } },
+      ];
+    }
+    if (query.seatType) {
+      concertWhere.seatType = query.seatType;
+    }
+    if (Object.keys(concertWhere).length > 0) {
+      where.concertInfo = { is: concertWhere };
+    }
+
+    const travelWhere: Prisma.TravelInfoWhereInput = {};
+    if (query.destination) {
+      travelWhere.destination = { contains: query.destination, mode: 'insensitive' };
+    }
+    if (query.transport) {
+      travelWhere.transport = query.transport;
+    }
+    if (query.budgetMax !== undefined) {
+      // 没填预算上限的局按「不设限」处理，不该被预算筛选排除
+      travelWhere.OR = [{ budgetMax: { lte: query.budgetMax } }, { budgetMax: null }];
+    }
+    if (Object.keys(travelWhere).length > 0) {
+      where.travelInfo = { is: travelWhere };
     }
     if (query.cursor) {
       const cursor = decodeCursor(query.cursor);
@@ -198,50 +234,104 @@ export class PostsService {  constructor(
   async create(authorId: string, input: CreatePostInput): Promise<PostDetail> {
     const startTime = new Date(input.startTime);
     if (startTime.getTime() <= Date.now()) {
-      throw new AppException('VALIDATION_FAILED', 400, '参数校验失败', [
-        { path: 'startTime', message: '开始时间必须晚于当前时间' },
-      ]);
+      throw validationError('startTime', '开始时间必须晚于当前时间');
+    }
+    if ('endTime' in input && input.endTime) {
+      if (new Date(input.endTime).getTime() <= startTime.getTime()) {
+        throw validationError('endTime', '结束时间必须晚于开始时间');
+      }
     }
 
-    const game = await this.prisma.game.findUnique({
-      where: { id: input.game.gameId },
-      select: { id: true, isActive: true },
-    });
-    if (!game || !game.isActive) {
-      throw new AppException('NOT_FOUND', 404, '游戏不存在');
-    }
+    const base = {
+      authorId,
+      title: input.title,
+      description: input.description,
+      city: input.city ?? null,
+      startTime,
+      capacity: input.capacity,
+      memberCount: 1,
+      status: 'OPEN' as const,
+      members: { create: { userId: authorId, role: 'HOST' as const } },
+    };
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      return tx.post.create({
-        data: {
-          authorId,
-          domain: 'GAME',
-          title: input.title,
-          description: input.description,
-          city: input.city ?? null,
-          startTime,
-          capacity: input.capacity,
-          memberCount: 1,
-          status: 'OPEN',
-          // 反范式字段：与 GameInfo.gameId 在同一事务内写入，保证筛选不依赖 join
-          gameId: game.id,
-          gameInfo: {
-            create: {
+    const created = await this.prisma.$transaction(
+      async (tx) => {
+        if (input.domain === 'GAME') {
+          const game = await tx.game.findUnique({
+            where: { id: input.game.gameId },
+            select: { id: true, isActive: true },
+          });
+          if (!game || !game.isActive) {
+            throw new AppException('NOT_FOUND', 404, '游戏不存在');
+          }
+
+          return tx.post.create({
+            data: {
+              ...base,
+              domain: 'GAME',
+              // 反范式字段：与 GameInfo.gameId 在同一事务内写入，保证筛选不依赖 join
               gameId: game.id,
-              platform: input.game.platform,
-              mode: input.game.mode ?? null,
-              rankMin: input.game.rankMin ?? null,
-              rankMax: input.game.rankMax ?? null,
-              needVoice: input.game.needVoice ?? false,
+              gameInfo: {
+                create: {
+                  gameId: game.id,
+                  platform: input.game.platform,
+                  mode: input.game.mode ?? null,
+                  rankMin: input.game.rankMin ?? null,
+                  rankMax: input.game.rankMax ?? null,
+                  needVoice: input.game.needVoice ?? false,
+                },
+              },
+            },
+            include: postDetailInclude,
+          });
+        }
+
+        if (input.domain === 'CONCERT') {
+          const concert = input.concert;
+          return tx.post.create({
+            data: {
+              ...base,
+              domain: 'CONCERT',
+              endTime: input.endTime ? new Date(input.endTime) : null,
+              concertInfo: {
+                create: {
+                  artist: concert.artist,
+                  tourName: concert.tourName ?? null,
+                  venue: concert.venue ?? null,
+                  seatType: concert.seatType ?? 'UNDECIDED',
+                  hasTicket: concert.hasTicket ?? true,
+                  ticketNote: concert.ticketNote ?? null,
+                },
+              },
+            },
+            include: postDetailInclude,
+          });
+        }
+
+        // TRAVEL：endTime 已由 schema 强制要求，这里直接落库
+        const travel = input.travel;
+        return tx.post.create({
+          data: {
+            ...base,
+            domain: 'TRAVEL',
+            endTime: new Date(input.endTime),
+            travelInfo: {
+              create: {
+                destination: travel.destination,
+                budgetMin: travel.budgetMin ?? null,
+                budgetMax: travel.budgetMax ?? null,
+                transport: travel.transport ?? 'ANY',
+                intensity: travel.intensity ?? 'MODERATE',
+                shareRoom: travel.shareRoom ?? false,
+              },
             },
           },
-          members: {
-            create: { userId: authorId, role: 'HOST' },
-          },
-        },
-        include: postDetailInclude,
-      });
-    });
+          include: postDetailInclude,
+        });
+      },
+      // Neon 冷启动 + 网络抖动下 5s 默认超时偏紧，事务里只做一次嵌套写入
+      { timeout: 10_000 },
+    );
 
     return toPostDetail(created, { id: authorId }, null);
   }
@@ -250,15 +340,11 @@ export class PostsService {  constructor(
     const post = await this.findOwned(postId, userId);
 
     if (input.capacity !== undefined && input.capacity < post.memberCount) {
-      throw new AppException('VALIDATION_FAILED', 400, '参数校验失败', [
-        { path: 'capacity', message: `名额不能少于当前成员数 ${post.memberCount}` },
-      ]);
+      throw validationError('capacity', `名额不能少于当前成员数 ${post.memberCount}`);
     }
 
     if (input.startTime !== undefined && new Date(input.startTime).getTime() <= Date.now()) {
-      throw new AppException('VALIDATION_FAILED', 400, '参数校验失败', [
-        { path: 'startTime', message: '开始时间必须晚于当前时间' },
-      ]);
+      throw validationError('startTime', '开始时间必须晚于当前时间');
     }
 
     const updated = await this.prisma.post.update({
@@ -277,16 +363,19 @@ export class PostsService {  constructor(
   }
 
   async cancel(postId: string, userId: string): Promise<{ ok: true }> {
-    const systemMessage = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.post.updateMany({
-        where: { id: postId, authorId: userId, status: { in: ['OPEN', 'FULL'] } },
-        data: { status: 'CANCELLED' },
-      });
-      if (updated.count === 0) {
-        return null;
-      }
-      return this.messages.appendSystemMessage(tx, postId, '发起人取消了这个局，聊天已关闭');
-    });
+    const systemMessage = await this.prisma.$transaction(
+      async (tx) => {
+        const updated = await tx.post.updateMany({
+          where: { id: postId, authorId: userId, status: { in: ['OPEN', 'FULL'] } },
+          data: { status: 'CANCELLED' },
+        });
+        if (updated.count === 0) {
+          return null;
+        }
+        return this.messages.appendSystemMessage(tx, postId, '发起人取消了这个局，聊天已关闭');
+      },
+      { timeout: 10_000 },
+    );
 
     if (!systemMessage) {
       const exists = await this.prisma.post.findUnique({

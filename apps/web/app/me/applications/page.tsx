@@ -15,7 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { listMyApplications } from '@/lib/api';
-import { formatPostTime } from '@/lib/format';
+import { postPrimary } from '@/lib/domain';
+import { postTimeLabel } from '@/lib/format';
 import { queryKeys } from '@/lib/query-keys';
 import { statusTone, toneOf } from '@/lib/tone';
 import { cn } from '@/lib/utils';
@@ -110,11 +111,11 @@ function JoinedPostRow({ post }: { post: JoinedPostSummary }) {
         <span
           className={cn(
             'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold',
-            toneOf(post.game?.name ?? '游戏').chip,
+            toneOf(postPrimary(post)).chip,
           )}
         >
-          <span className={cn('size-1.5 rounded-full', toneOf(post.game?.name ?? '游戏').dot)} />
-          {post.game?.name ?? '游戏'}
+          <span className={cn('size-1.5 rounded-full', toneOf(postPrimary(post)).dot)} />
+          {postPrimary(post)}
         </span>
         <Badge className={statusTone(post.status)}>
           {POST_STATUS_LABELS[post.status as PostStatus] ?? post.status}
@@ -139,7 +140,7 @@ function JoinedPostRow({ post }: { post: JoinedPostSummary }) {
 
       <p className="mt-1.5 inline-flex items-center gap-1 text-xs text-ink-muted">
         <ClockIcon className="size-3.5" />
-        {formatPostTime(post.startTime)} · {post.memberCount}/{post.capacity} 人
+        {postTimeLabel(post)} · {post.memberCount}/{post.capacity} 人
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
