@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { HomeFilters } from '@/components/home-filters';
 import { PostsList, type PostFilters } from '@/components/posts-list';
+import { TravelHikingStrip } from '@/components/travel-hiking-strip';
 import { DOMAIN_META, DOMAIN_ORDER, domainOf } from '@/lib/domain';
 import { cn } from '@/lib/utils';
 
@@ -140,6 +141,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </header>
 
       <HomeFilters domain={domain} initial={initial} />
+      {domain === 'TRAVEL' ? <TravelHikingStrip /> : null}
       <PostsList filters={filters} />
     </main>
   );

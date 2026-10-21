@@ -1,5 +1,6 @@
 export * from './enums';
 export * from './game-modules';
+export * from './hiking-routes';
 export * from './errors';
 export * from './schemas/pagination';
 export * from './schemas/auth';

@@ -583,6 +583,8 @@ V1 的所有筛选都是等值或范围条件，走索引即可，不引入搜�
 
 数据量超过约 10 万条局或需要相关性排序时，再上 Meilisearch：以 outbox 表做增量同步，不改变对外 API 契约。
 
+徒步路线攻略是静态内容（`packages/shared/src/hiking-routes.ts`），不参与局的筛选，也不新增数据库索引与接口。
+
 ### 6.7 图片上传
 
 - 客户端向 `POST /api/v1/uploads/presign` 申请预签名 PUT（返回 `key` 与 `url`），直传 S3/MinIO，服务端只做签发与校验。
@@ -830,6 +832,7 @@ NEXT_PUBLIC_WS_URL=ws://localhost:3001
 5. 前端发布表单、首页筛选、卡片与详情页复用同一套票券组件，按领域切换字段与配色。
 6. 集成测试：`apps/api/test/multi-domain.e2e-spec.ts` 覆盖演唱会 / 旅游发布、筛选与非法输入。
 7. 迁移顺序修正：早期提交的 `20261020130931_m5_trust_indexes` 时间戳早于 `init`，会把索引建在空库上失败；已重命名为 `20261020170000_m5_trust_indexes`。已有开发 / 测试库需执行一次迁移历史修复（删除旧记录与旧索引后 `prisma migrate deploy`），新库无需处理。
+8. 徒步路线攻略（旅行模块的附加内容）：数据放在 `packages/shared/src/hiking-routes.ts`，不建表、不加接口、不引入地图 SDK。前端新增 `/travel/hikes` 列表（难度 / 地区用 URL 参数筛选）与 `/travel/hikes/[slug]` 详情（`generateStaticParams` 预渲染），旅行首页增加三条精选入口；发布表单按目的地模糊匹配攻略并支持从详情页预填目的地。小地图与海拔剖面都是内联 SVG 示意，明确标注「非导航」，符合 `PRD.md` §5.2 的非目标。
 
 ## 13. 风险与备选方案
 

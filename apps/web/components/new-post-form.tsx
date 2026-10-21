@@ -13,6 +13,7 @@ import {
   TRAVEL_TRANSPORT_LABELS,
   createPostSchema,
   gameModuleOf,
+  hikingRoutesMatching,
   type ConcertSeat,
   type Domain,
   type Platform,
@@ -132,7 +133,13 @@ function FieldError({ message }: { message: string | undefined }) {
   return <p className="mt-1 text-xs text-danger">{message}</p>;
 }
 
-export function NewPostForm({ initialDomain }: { initialDomain: Domain }) {
+export function NewPostForm({
+  initialDomain,
+  initialDestination,
+}: {
+  initialDomain: Domain;
+  initialDestination?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [domain, setDomain] = useState<Domain>(initialDomain);
@@ -148,9 +155,15 @@ export function NewPostForm({ initialDomain }: { initialDomain: Domain }) {
     enabled: domain === 'GAME',
   });
 
-  const form = useForm<PostFormValues>({ defaultValues: DEFAULT_VALUES });
+  const form = useForm<PostFormValues>({
+    defaultValues: { ...DEFAULT_VALUES, destination: initialDestination ?? '' },
+  });
   const errors = form.formState.errors;
   const meta = DOMAIN_META[domain];
+
+  // 目的地写到「雨崩 / 雨崩村 / 云南雨崩」时都能匹配到攻略，给发布表单一个行前入口
+  const destinationValue = form.watch('destination');
+  const matchedRoute = hikingRoutesMatching(destinationValue)[0];
 
   // 游戏模块预设：选不同游戏时换掉默认平台，并清掉上一款游戏的模式 / 段位
   const selectedGameId = form.watch('gameId');
@@ -522,6 +535,19 @@ export function NewPostForm({ initialDomain }: { initialDomain: Domain }) {
                 <Label htmlFor="destination">目的地</Label>
                 <Input id="destination" placeholder="大理" {...form.register('destination')} />
                 <FieldError message={errors.destination?.message} />
+                <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+                  <span className="min-w-0 truncate text-ink-faint">
+                    {matchedRoute
+                      ? `有「${matchedRoute.name}」攻略：${matchedRoute.duration} · ${matchedRoute.distanceKm} km`
+                      : '第一次走长线？先把路线和装备看一遍'}
+                  </span>
+                  <Link
+                    href={matchedRoute ? `/travel/hikes/${matchedRoute.slug}` : '/travel/hikes'}
+                    className="shrink-0 font-semibold text-tone-3 underline underline-offset-2 transition-colors hover:text-ink"
+                  >
+                    查看攻略
+                  </Link>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
